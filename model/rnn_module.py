@@ -39,17 +39,20 @@ class RNNBlock(nn.Module):
         return self._dim_output
     
 class StackedRNNBlock(nn.Module):
-    def __init__(self, blocks: List[RNNBlock], parallel: bool = False):
+    def __init__(self, blocks: List[RNNBlock], parallel: bool = False, residual: bool = True):
         super().__init__()
         self.blocks = nn.ModuleList(blocks)
         self._dim_output = sum([b.dim_output for b in blocks])
         self.parallel = parallel
+        self.residual = residual
 
     def forward(self, state_list, x):
         new_states = []
         input = x
         for block, state in zip(self.blocks, state_list):
             new_state, gate = block(state, input)
+            if self.residual:
+                new_state = new_state + state
             input = new_state
             # Gate=0: keep old state, Gate=1: take new state
             if self.parallel:

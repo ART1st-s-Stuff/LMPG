@@ -5,6 +5,8 @@ import os
 from model.model import HRNN
 from model.decoder import FFNNDecoder
 
+def data_parser()
+
 def load_checkpoint(checkpoint_path: str):
     if not os.path.exists(checkpoint_path):
         model = HRNN.default()

@@ -1,4 +1,4 @@
-from typing import List
+from typing import Callable, List, Optional
 
 import torch
 from torch import nn
@@ -65,15 +65,27 @@ class HRNN(nn.Module):
         self.encoders = encoders
         self.decoder = decoder
         
-    def forward(self, x: torch.Tensor):
-        states = self.get_initial_states(x.device)
-        output = torch.empty((x.size(0), x.size(1), self.decoder.dim_output), device=x.device)
+    def forward(self, x: torch.Tensor, states=None, post_processing: Optional[Callable[[torch.Tensor], torch.Tensor]] = None):
+        if states is None:
+            states = self.get_initial_states(x.device)
         for t in range(x.size(1)):
             x_t = x[:, t, :]
             new_states = [self.encoders[i](states[i], x_t) for i in range(len(self.encoders))]
             new_states_tensor = torch.cat([ns[1] for ns in new_states], dim=0)
-            output[:, t, :] = self.decoder(new_states_tensor)
+            y = self.decoder(new_states_tensor)
+            processed_y = post_processing(y) if post_processing is not None else y
+            output = processed_y if t == 0 else torch.cat([output, processed_y], dim=1)
             states = new_states
+        return output
+    
+    def self_regression(self, x: torch.Tensor, max_output: int, halt_if: Callable[[torch.Tensor], bool], states=None, post_processing: Optional[Callable[[torch.Tensor], torch.Tensor]] = None):
+        output = self.forward(x, states)
+        while output.size(1) < max_output:
+            x_t = output[:, -1, :].unsqueeze(1)
+            y_t = self.forward(x_t, states)
+            output = torch.cat([output, y_t], dim=1)
+            if halt_if(y_t):
+                break
         return output
 
     @staticmethod
