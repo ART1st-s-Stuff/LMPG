@@ -28,11 +28,11 @@ class HRNNEncoder(nn.Module):
     @staticmethod
     def default():
         encoder_rnn_block_args = {
-            'dim_hidden': 4096,
+            'dim_hidden': 2048,
             'dropout': 0.3,
             'num_layers': 3
         }
-        dim_output_middle = 4096
+        dim_output_middle = 2048
         return HRNNEncoder(
             StackedRNNBlock(
                 blocks=[
@@ -93,11 +93,15 @@ class HRNN(nn.Module):
         encoders = [ HRNNEncoder.default() for _ in range(16) ]
         decoder = RNNBlock(
             dim_input=encoders[-1].dim_output * len(encoders),
-            dim_hidden=4096,
+            dim_hidden=2048,
             dim_output=1024,
             num_layers=6
         )
         return HRNN(encoders, decoder)
+    
+    @property
+    def dim_output(self):
+        return self.decoder.dim_output
     
     def get_initial_states(self, device: torch.device):
         return [ [torch.zeros(1, encoder.dim_output, device=device) for _ in range(len(encoder.encoder.blocks))] for encoder in self.encoders ]
