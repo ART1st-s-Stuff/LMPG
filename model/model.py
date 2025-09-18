@@ -10,15 +10,15 @@ class HRNNEncoder(nn.Module):
         super().__init__()
         self.encoder = encoder
         self.ffnn = nn.Sequential(
-            nn.Linear(dim_output, dim_hidden),
+            nn.Linear(dim_hidden, dim_hidden),
             nn.GELU(),
             nn.Linear(dim_hidden, dim_output)
         )
         self._dim_output = dim_output
 
-    def forward(self, states, x):
-        states = self.encoder(states, x)
-        output = self.ffnn(torch.cat(states, dim=-1))
+    def forward(self, x, states):
+        states = self.encoder(x, states)
+        output = self.ffnn(states)
         return output, states
     
     @property
@@ -57,25 +57,28 @@ class HRNNEncoder(nn.Module):
                         **encoder_rnn_block_args
                     ),
                 ]
-            ), dim_hidden=dim_output_middle * 4, dim_output=512)
+            ), dim_hidden=dim_output_middle * 4, dim_output=1024)
     
 class HRNN(nn.Module):
     def __init__(self, encoders: List[HRNNEncoder], decoder: RNNBlock):
         super().__init__()
         self.encoders = encoders
-        self.decoder = decoder
         
     def forward(self, x: torch.Tensor, states=None, post_processing: Optional[Callable[[torch.Tensor], torch.Tensor]] = None):
         if states is None:
             states = self.get_initial_states(x.device)
         for t in range(x.size(1)):
-            x_t = x[:, t, :]
-            new_states = [self.encoders[i](states[i], x_t) for i in range(len(self.encoders))]
-            new_states_tensor = torch.cat([ns[1] for ns in new_states], dim=0)
-            y = self.decoder(new_states_tensor)
-            processed_y = post_processing(y) if post_processing is not None else y
+            x_t = x[t, :]
+            encoded = [self.encoders[i](x_t, states[i]) for i in range(len(self.encoders))]
+            ns_list = []
+            y_list = []
+            for y, ns in encoded:
+                ns_list.append(ns)
+                y_list.append(y)
+            y_tensor = torch.cat(y_list)
+            processed_y = post_processing(y_tensor) if post_processing is not None else y_tensor
             output = processed_y if t == 0 else torch.cat([output, processed_y], dim=1)
-            states = new_states
+            states = ns_list
         return output
     
     def self_regression(self, x: torch.Tensor, max_output: int, halt_if: Callable[[torch.Tensor], bool], states=None, post_processing: Optional[Callable[[torch.Tensor], torch.Tensor]] = None):
@@ -90,10 +93,10 @@ class HRNN(nn.Module):
 
     @staticmethod
     def default():
-        encoders = [ HRNNEncoder.default() for _ in range(16) ]
+        encoders = [ HRNNEncoder.default() for _ in range(8) ]
         decoder = RNNBlock(
             dim_input=encoders[-1].dim_output * len(encoders),
-            dim_hidden=2048,
+            dim_hidden=4096,
             dim_output=1024,
             num_layers=6
         )
@@ -101,7 +104,7 @@ class HRNN(nn.Module):
     
     @property
     def dim_output(self):
-        return self.decoder.dim_output
-    
+        return sum([encoder.dim_output for encoder in self.encoders])
+       
     def get_initial_states(self, device: torch.device):
-        return [ [torch.zeros(1, encoder.dim_output, device=device) for _ in range(len(encoder.encoder.blocks))] for encoder in self.encoders ]
+        return [ encoder.encoder.get_initial_states(device) for encoder in self.encoders ]

@@ -5,13 +5,14 @@ import string
 import random
 import re
 from tqdm import tqdm
+import multiprocessing
+from multiprocessing import Pool, Manager, Lock
 
 from model.model import HRNN
 from model.decoder import FFNNDecoder
 
-from datasets import load_dataset
+from datasets import load_dataset, Dataset, NamedSplit
 
-ds = load_dataset("agentlans/high-quality-english-sentences")
 
 def load_checkpoint(checkpoint_path: str):
     print("Loading model.")
@@ -19,7 +20,7 @@ def load_checkpoint(checkpoint_path: str):
         model = HRNN.default()
         decoder1 = FFNNDecoder(
             dim_input=model.dim_output,
-            dim_hidden=256,
+            dim_hidden=2048,
             num_layers=4,
             dim_output=1,
             dropout=0.3,
@@ -27,7 +28,7 @@ def load_checkpoint(checkpoint_path: str):
         )
         decoder2 = FFNNDecoder(
             dim_input=model.dim_output,
-            dim_hidden=256,
+            dim_hidden=2048,
             num_layers=4,
             dim_output=1,
             dropout=0.3,
@@ -35,7 +36,7 @@ def load_checkpoint(checkpoint_path: str):
         )
         decoder3 = FFNNDecoder(
             dim_input=model.dim_output,
-            dim_hidden=256,
+            dim_hidden=2048,
             num_layers=4,
             dim_output=33,
             dropout=0.3,
@@ -59,7 +60,7 @@ def as_utf32_tensor(s: str):
         tensor[i] = torch.tensor([(utf32_c >> j) & 1 for j in range(32)], dtype=torch.float32)
     return tensor
 
-def build_vocabulary_dataset(data):
+def build_vocabulary_dataset(data: Dataset):
     if os.path.exists("dataset/vocab.ds"):
         print("Loading vocabulary dataset from cache.")
         return torch.load("dataset/vocab.ds")
@@ -75,56 +76,58 @@ def build_vocabulary_dataset(data):
         y = torch.ones(len(v), dtype=torch.float32)
         y[-1] = 0  # End token
         ds.append((0, as_utf32_tensor(v), y))
+    torch.save(ds, "dataset/vocab.ds")
     return ds
 
-def build_sentence_sanity_dataset(data):
-    if os.path.exists("dataset/sentence_sanity.ds"):
-        print("Loading sentence sanity dataset from cache.")
-        return torch.load("dataset/sentence_sanity.ds")
-    ds = []
-    for item in tqdm(data, desc="Building sentence sanity dataset"):
-        text : str = item["text"]
-        remove_period = text.rstrip('.')
-        if len(remove_period) == 0:
-            continue
-        y = torch.ones(len(remove_period), dtype=torch.float32)
-        y[-1] = 0  # End token
-        ds.append((1, as_utf32_tensor(remove_period), y))
-    return ds
+def sanity(text: str):
+    remove_period = text.rstrip('.')
+    if len(remove_period) == 0:
+        return None, None
+    y = torch.ones(len(remove_period), dtype=torch.float32)
+    y[-1] = 0  # End token
+    return as_utf32_tensor(remove_period), y
 
-def build_cloze_dataset(data):
-    if os.path.exists("dataset/cloze.ds"):
-        print("Loading cloze dataset from cache.")
-        return torch.load("dataset/cloze.ds")
+def cloze(text: str):
     def randomly_remove_word(s: str):
         words = re.split(f"[{re.escape(string.punctuation)} \n\t]", s)
         if len(words) <= 1:
-            return s  # Can't remove any word
+            return None, None
         idx = random.randint(0, len(words) - 1)
         answer = words[idx]
         words[idx] = "<BLANK>"
         return " ".join(words), answer
     
-    ds = []
-    for item in tqdm(data, desc="Building cloze dataset"):
-        sentence, answer = randomly_remove_word(item["text"])
-        sentence = "<CLOZE TASK>: " + sentence
-        # Add the 33rd dimension for end token
-        answer_tensor = as_utf32_tensor(answer)
-        answer_tensor = torch.cat([answer_tensor, torch.ones((1, 32), dtype=torch.float32)], dim=0)
-        answer_tensor[-1] = torch.zeros(33, dtype=torch.float32)  # End token
-        ds.append((2, as_utf32_tensor(sentence), ))
-    return ds
+    sentence, answer = randomly_remove_word(text)
+    if sentence is None or answer is None:
+        return None, None
+    sentence = "<CLOZE TASK>: " + sentence
+    # Add the 33rd dimension for end token
+    answer_tensor = as_utf32_tensor(answer)
+    answer_tensor = torch.cat([answer_tensor, torch.ones((1, 33), dtype=torch.float32)], dim=0)
+    answer_tensor[-1] = torch.zeros(33, dtype=torch.float32)  # End token
+    return as_utf32_tensor(sentence), answer_tensor
 
-def train(model: HRNN, decoder1: FFNNDecoder, decoder2: FFNNDecoder, decoder3: FFNNDecoder, data):
-    loss_fn = nn.CrossEntropyLoss()
+def train(model: HRNN, decoder1: FFNNDecoder, decoder2: FFNNDecoder, decoder3: FFNNDecoder):
+    ds = load_dataset("agentlans/high-quality-english-sentences")
+    ds = ds["train"]
+    
+    vocabulary_ds = build_vocabulary_dataset(ds)
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    loss_fn = nn.CrossEntropyLoss().to(device)
     optimizer = optim.AdamW(list(model.parameters()) + list(decoder1.parameters()) + list(decoder2.parameters()) + list(decoder3.parameters()), lr=0.001)
-
+    
+    
+    model = model.to(device)
+    decoder1 = decoder1.to(device)
+    decoder2 = decoder2.to(device)
+    decoder3 = decoder3.to(device)
+    
     model.train()
     decoder1.train()
     decoder2.train()
     decoder3.train()
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     model.zero_grad()
     decoder1.zero_grad()
@@ -133,34 +136,34 @@ def train(model: HRNN, decoder1: FFNNDecoder, decoder2: FFNNDecoder, decoder3: F
     
     print("Building datasets...")
 
-    ds_word = build_vocabulary_dataset(data) * 10
-    print("Building datasets 1/3")
-    ds_sentence = build_sentence_sanity_dataset(data[:len(data) - 10000]) * 5
-    print("Building datasets 2/3")
-    ds_cloze = build_cloze_dataset(data[len(data) - 10000:]) * 2
-    print("Building datasets 3/3, shuffling...")
-
-    train = ds_word + ds_sentence + ds_cloze
-    random.shuffle(train)
+    #random.shuffle(train)
     losses = [-1, -1, -1]
     i = 0
 
     print("Start training process...")
+    
+    training_ds = list(ds) + vocabulary_ds
+    random.shuffle(training_ds)
 
-    for task, x, y in tqdm(train):
-        x = x.to(device)
-        y = y.to(device)
-
-        # Forward pass
-        match task:
-            case 0:
-                y_hat = model(x, post_processing=decoder1)
-            case 1:
+    for v in tqdm(training_ds):
+        if isinstance(v, tuple):
+            _, x, y = v
+            y_hat = model(x, post_processing=decoder1)
+            task = 0
+        else:
+            randval = random.random()
+            if randval < 0.9:
+                x, y = sanity(v["text"])
+                if x is None or y is None:
+                    continue
                 y_hat = model(x, post_processing=decoder2)
-            case 2:
-                y_hat = model.self_regression(x, max_output=64, halt_if=lambda t: (t.argmax(dim=-1) == 0).all(), post_processing=decoder3)
-            case _:
-                raise ValueError("Unknown task")
+                task = 1
+            else:
+                x, y = cloze(v["text"])
+                if x is None or y is None:
+                    continue
+                y_hat = model.self_regression(x, max_output=y.shape[0], halt_if=lambda _: False, post_processing=decoder3)
+                task = 2
 
         # Compute loss
         loss = loss_fn(y_hat, y)
@@ -179,7 +182,7 @@ def train(model: HRNN, decoder1: FFNNDecoder, decoder2: FFNNDecoder, decoder3: F
                 "decoder1": decoder1,
                 "decoder2": decoder2,
                 "decoder3": decoder3,
-            })
+            }, "checkpoints/word_identification.pth")
         i += 1
         
         
@@ -191,5 +194,6 @@ def set_seed(seed):
         
 if __name__ == "__main__":
     set_seed(114514)
+    ds = load_dataset("agentlans/high-quality-english-sentences")
     packed_models = load_checkpoint("checkpoints/word_identification.pth")
     train(*packed_models, ds["train"])
