@@ -17,7 +17,7 @@ from datasets import load_dataset, Dataset, NamedSplit
 def load_checkpoint(checkpoint_path: str):
     print("Loading model.")
     if not os.path.exists(checkpoint_path):
-        model = HRNN.default()
+        model = HRNN.tiny()
         decoder1 = FFNNDecoder(
             dim_input=model.dim_output,
             dim_hidden=2048,
@@ -38,7 +38,7 @@ def load_checkpoint(checkpoint_path: str):
             dim_input=model.dim_output,
             dim_hidden=2048,
             num_layers=4,
-            dim_output=33,
+            dim_output=32,
             dropout=0.3,
             type="sigmoid"
         )
@@ -101,10 +101,8 @@ def cloze(text: str):
     if sentence is None or answer is None:
         return None, None
     sentence = "<CLOZE TASK>: " + sentence
-    # Add the 33rd dimension for end token
     answer_tensor = as_utf32_tensor(answer)
-    answer_tensor = torch.cat([answer_tensor, torch.ones((1, 33), dtype=torch.float32)], dim=0)
-    answer_tensor[-1] = torch.zeros(33, dtype=torch.float32)  # End token
+    answer_tensor = torch.cat([answer_tensor, torch.zeros(32, dtype=torch.float32)], dim=0)  # End token
     return as_utf32_tensor(sentence), answer_tensor
 
 def train(model: HRNN, decoder1: FFNNDecoder, decoder2: FFNNDecoder, decoder3: FFNNDecoder):
@@ -148,7 +146,9 @@ def train(model: HRNN, decoder1: FFNNDecoder, decoder2: FFNNDecoder, decoder3: F
     for v in tqdm(training_ds):
         if isinstance(v, tuple):
             _, x, y = v
-            y_hat = model(x, post_processing=decoder1)
+            x = x.to(device)
+            y = y.to(device)
+            y_hat = model(x, post_processing=decoder1).squeeze(0)
             task = 0
         else:
             randval = random.random()
@@ -156,16 +156,22 @@ def train(model: HRNN, decoder1: FFNNDecoder, decoder2: FFNNDecoder, decoder3: F
                 x, y = sanity(v["text"])
                 if x is None or y is None:
                     continue
-                y_hat = model(x, post_processing=decoder2)
+                x = x.to(device)
+                y = y.to(device)
+                y_hat = model(x, post_processing=decoder2).squeeze(0)
                 task = 1
             else:
                 x, y = cloze(v["text"])
                 if x is None or y is None:
                     continue
+                x = x.to(device)
+                y = y.to(device)
                 y_hat = model.self_regression(x, max_output=y.shape[0], halt_if=lambda _: False, post_processing=decoder3)
                 task = 2
 
         # Compute loss
+        #print(task, y_hat.shape, y.shape)
+        #print(y_hat, y)
         loss = loss_fn(y_hat, y)
         losses[task] = loss.item() if losses[task] < 0 else 0.7 * losses[task] + 0.3 * loss.item()
 

@@ -1,0 +1,120 @@
+def build_vocabulary_dataset(data: Dataset):
+    if os.path.exists("dataset/vocab.ds"):
+        print("Loading vocabulary dataset from cache.")
+        return torch.load("dataset/vocab.ds")
+    vocab = set()
+    ds = []
+    for item in tqdm(data, desc="Building vocabulary dataset stage 1"):
+        text : str = item["text"]
+        words = re.split(f"[{re.escape(string.punctuation)} \n\t]", text)
+        vocab.update(words)
+    for v in tqdm(vocab, desc="Building vocabulary dataset stage 2"):
+        if len(v) == 0:
+            continue
+        y = torch.ones(len(v), dtype=torch.float32)
+        y[-1] = 0  # End token
+        ds.append((0, as_utf32_tensor(v), y))
+    torch.save(ds, "dataset/vocab.ds")
+    return ds
+
+# def randomly_remove_word(s: str):
+#     words = re.split(f"[{re.escape(string.punctuation)} \n\t]", s)
+#     if len(words) <= 1:
+#         return None, None
+#     idx = random.randint(0, len(words) - 1)
+#     answer = words[idx]
+#     words[idx] = "<BLANK>"
+#     return " ".join(words), answer
+
+# def build_sentence_thread(arg):
+#     items, i = arg
+#     ds = []
+#     idx = 0
+#     for item in tqdm(items, desc="Building sentence dataset", position=i):
+#         if idx % 10 == 0:
+#             sentence, answer = randomly_remove_word(item)
+#             if sentence is None or answer is None:
+#                 continue
+#             sentence = "<CLOZE TASK>: " + sentence
+#             # Add the 33rd dimension for end token
+#             answer_tensor = as_utf32_tensor(answer)
+#             answer_tensor = torch.cat([answer_tensor, torch.ones((1, 32), dtype=torch.float32)], dim=0)
+#             answer_tensor[-1] = torch.zeros(32, dtype=torch.float32)  # End token
+#             ds.append((2, as_utf32_tensor(sentence), answer_tensor))
+#         else:
+#             text: str = item
+#             remove_period = text.rstrip('.')
+#             if len(remove_period) == 0:
+#                 continue
+#             y = torch.ones(len(remove_period), dtype=torch.float32)
+#             y[-1] = 0  # End token
+#             ds.append((1, as_utf32_tensor(remove_period), y))
+#         idx += 1
+#     return ds
+
+
+# def build_sentence_dataset(data: Dataset):
+#     if os.path.exists("dataset/sentence.ds"):
+#         print("Loading sentence dataset from cache.")
+#         sentence_ds = torch.load("dataset/sentence.ds")
+#         return sentence_ds
+
+#     with Pool(processes=multiprocessing.cpu_count(),
+#                 initializer=tqdm.set_lock,
+#                 initargs=(Lock(),),) as pool:
+#         chunk_size = (len(data) // multiprocessing.cpu_count() + 1)
+#         split_data = [(data[i:i + chunk_size]["text"], int(i / chunk_size)) for i in range(0, len(data), chunk_size)]
+#         # print(data[0:5],)
+#         # print(chunk_size, len(data), len(split_data), len(split_data[0]), split_data[0][0])
+#         # build_sentence_thread(split_data[0])  # Warm up
+#         results = pool.map(build_sentence_thread, split_data)
+
+#         results = [item for sublist in results for item in sublist]
+
+#     torch.save(results, "dataset/sentence.ds")
+#     return results
+
+# def build_train_dataset():
+#     ds = load_dataset("agentlans/high-quality-english-sentences")
+#     data = ds["train"]
+#     #ds_word = build_vocabulary_dataset(data) * 10
+#     print("Building datasets 1/2")
+#     ds_sentence = build_sentence_dataset(data)
+#     print(len(ds_sentence))
+#     print("Building datasets 2/2, shuffling...")
+#     #ds = ds_word + ds_sentence
+#     random.shuffle(ds)
+#     return ds
+
+# def randomly_remove_word(s: str):
+#     words = re.split(f"[{re.escape(string.punctuation)} \n\t]", s)
+#     if len(words) <= 1:
+#         return s  # Can't remove any word
+#     idx = random.randint(0, len(words) - 1)
+#     answer = words[idx]
+#     words[idx] = "<BLANK>"
+#     return " ".join(words), answer
+
+# def per_item(item):
+#     i = random.random()
+#     if i < 0.9:
+#         text: str = item["text"]
+#         remove_period = text.rstrip('.')
+#         if len(remove_period) == 0:
+#             return torch.empty()
+#         y = torch.ones(len(remove_period), dtype=torch.float32)
+#         y[-1] = 0  # End token
+#         return 0, as_utf32_tensor(remove_period), y
+#     else:
+#         sentence, answer = randomly_remove_word(item["text"])
+#         sentence = "<CLOZE TASK>: " + sentence
+#         # Add the 33rd dimension for end token
+#         answer_tensor = as_utf32_tensor(answer)
+#         answer_tensor = torch.cat([answer_tensor, torch.ones((1, 32), dtype=torch.float32)], dim=0)
+#         answer_tensor[-1] = torch.zeros(33, dtype=torch.float32)  # End token
+#         return 1, as_utf32_tensor(sentence), answer_tensor
+
+# def build_train_dataset():
+#     ds = load_dataset("agentlans/high-quality-english-sentences")
+#     data = ds["train"]
+#     data = data.map

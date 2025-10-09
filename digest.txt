@@ -1,0 +1,18 @@
+Bug localization is a common but time consuming task in software engineering.
+Large Language Model have demonstrated remarkable performance in
+various software engineering tasks, such as identifying buggy code snippets.
+Thus, it is natural to consider using LLMs for bug localization. Since the codebase
+can be extremely large, neither feeding the codebase into the LLM nor letting the LLM to
+check the source file one by one would be impossible.
+In this paper, we propose Palantir, an LLM agent that leverages the information
+in the bug report to automatically explore the codebase and find the contributing code snippet.
+Palantir consists of several components and runs iteratively.
+It first gathers information from source code and logs,
+then tries to answer the question. If the question is unable to answer 
+in the current iteration, Palantir divides it into smaller subquestions
+for the next iteration. It maintains a tree structure to store the
+exploration process. It backtracks when a subquestion
+is answered, until the root cause of the bug is found or timeout is reached.
+Finally, we evaluate Palantir on a set of popular open-source distributed systems, 
+including Zookeeper, Kafka and HDFS.
+\todo{}

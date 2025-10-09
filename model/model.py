@@ -58,16 +58,51 @@ class HRNNEncoder(nn.Module):
                     ),
                 ]
             ), dim_hidden=dim_output_middle * 4, dim_output=1024)
+        
+    @staticmethod
+    def tiny():
+        encoder_rnn_block_args = {
+            'dim_hidden': 256,
+            'dropout': 0.3,
+            'num_layers': 3
+        }
+        dim_output_middle = 256
+        return HRNNEncoder(
+            StackedRNNBlock(
+                blocks=[
+                    RNNBlock(
+                        dim_input=32,       # UTF-32
+                        dim_output=dim_output_middle,
+                        **encoder_rnn_block_args
+                    ),
+                    RNNBlock(
+                        dim_input=dim_output_middle,
+                        dim_output=dim_output_middle,
+                        **encoder_rnn_block_args
+                    ),
+                    RNNBlock(
+                        dim_input=dim_output_middle,
+                        dim_output=dim_output_middle,
+                        **encoder_rnn_block_args
+                    ),
+                    RNNBlock(
+                        dim_input=dim_output_middle,
+                        dim_output=dim_output_middle,
+                        **encoder_rnn_block_args
+                    ),
+                ]
+            ), dim_hidden=dim_output_middle * 4, dim_output=256)
     
 class HRNN(nn.Module):
     def __init__(self, encoders: List[HRNNEncoder], decoder: RNNBlock):
         super().__init__()
-        self.encoders = encoders
+        self._encoders = encoders
+        self.encoders = nn.ModuleList(encoders)
         
     def forward(self, x: torch.Tensor, states=None, post_processing: Optional[Callable[[torch.Tensor], torch.Tensor]] = None):
         if states is None:
             states = self.get_initial_states(x.device)
-        for t in range(x.size(1)):
+        for t in range(x.size(0)):
             x_t = x[t, :]
             encoded = [self.encoders[i](x_t, states[i]) for i in range(len(self.encoders))]
             ns_list = []
@@ -77,6 +112,8 @@ class HRNN(nn.Module):
                 y_list.append(y)
             y_tensor = torch.cat(y_list)
             processed_y = post_processing(y_tensor) if post_processing is not None else y_tensor
+            if processed_y.dim() == 1:
+                processed_y = processed_y.unsqueeze(0)
             output = processed_y if t == 0 else torch.cat([output, processed_y], dim=1)
             states = ns_list
         return output
@@ -93,7 +130,7 @@ class HRNN(nn.Module):
 
     @staticmethod
     def default():
-        encoders = [ HRNNEncoder.default() for _ in range(8) ]
+        encoders = [ HRNNEncoder.default() for _ in range(16) ]
         decoder = RNNBlock(
             dim_input=encoders[-1].dim_output * len(encoders),
             dim_hidden=4096,
@@ -102,9 +139,19 @@ class HRNN(nn.Module):
         )
         return HRNN(encoders, decoder)
     
+    @staticmethod
+    def tiny():
+        encoders = [ HRNNEncoder.tiny() for _ in range(8) ]
+        decoder = RNNBlock(
+            dim_input=encoders[-1].dim_output * len(encoders),
+            dim_hidden=2048,
+            dim_output=512,
+            num_layers=6
+        )
+        return HRNN(encoders, decoder)
+    
     @property
     def dim_output(self):
-        return sum([encoder.dim_output for encoder in self.encoders])
-       
+        return sum([encoder.dim_output for encoder in self._encoders])
     def get_initial_states(self, device: torch.device):
-        return [ encoder.encoder.get_initial_states(device) for encoder in self.encoders ]
+        return [ encoder.encoder.get_initial_states(device) for encoder in self._encoders ]
