@@ -1,3 +1,6 @@
 [submodule "rwkv"]
 	path = rwkv
 	url = https://github.com/OpenMOSE/RWKV-LM-RLHF.git
+[submodule "OpenRLHF"]
+	path = OpenRLHF
+	url = https://github.com/OpenRLHF/OpenRLHF.git

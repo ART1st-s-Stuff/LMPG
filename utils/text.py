@@ -1,13 +1,12 @@
-from typing import Sequence, Generic, TypeVar, Callable
-
+from typing import Callable, Generic, Sequence, TypeVar
+        
 T = TypeVar('T')
 
 class Text(Generic[T]):
     WINDOW_LENGTH = 80      # 80 tokens per window
-    WINDOW_PER_PAGE = 10
+    WINDOW_PER_PAGE = 10    # 10 windows per page
 
     def __init__(self, tokenizer: Callable[[str], Sequence[T]], text: str):
-        # super().__init__()
         self.tokenizer = tokenizer
         self.text = self.tokenizer(text)
         self.reset()
@@ -35,3 +34,6 @@ class Text(Generic[T]):
     def go_to_page(self, page_number: int) -> Sequence[T]:
         self.index = page_number * self.WINDOW_LENGTH * self.WINDOW_PER_PAGE
         return self.read()
+    
+def text_window(text: str) -> Text[str]:
+    ...
