@@ -2,7 +2,7 @@ from typing import Callable, Generic, Sequence, TypeVar
 
 import torch
 
-class Text:
+class TextWindow:
     SEGMENT_LENGTH = 80      # 80 tokens per window
 
     def __init__(self, tokenizer: Callable[[str], torch.Tensor], text: str, internal: bool = False):
@@ -24,7 +24,7 @@ class Text:
         current_segment = self.index // self.SEGMENT_LENGTH + 1
         if current_segment != self.segment:
             self.segment = current_segment
-            ret = torch.cat([self.tokenizer(f'<|SEGMENT {self.segment}|>'), ret, self.tokenizer(f'</|SEGMENT {self.segment}|>')])
+            ret = torch.cat([self.tokenizer(f'<|SEGMENT {self.segment}|>'), ret, self.tokenizer(f'<|/SEGMENT {self.segment}|>')])
         return ret
     
     def reset(self):
@@ -42,5 +42,5 @@ class Text:
             dim_role = torch.ones(tokens.size(0))
         return torch.stack([tokens, dim_role], dim=-1)
     
-def text_window(text: str) -> Text[str]:
+def text_window(text: str) -> TextWindow[str]:
     ...

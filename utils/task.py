@@ -1,18 +1,19 @@
 from abc import ABC, abstractmethod
-from typing import Union
-import re
+from typing import Dict, List
 
 import torch
 
 from utils.scoring import Scoreboard
 from utils.environment import Environment
+from utils.tool import Tool, parse_llm_output, ToolCallException, ToolNotExistException
+from utils.text import TextWindow
 import utils.settings as settings
 
 class Agent(ABC):
     def __init__(self, environment: Environment):
         self.environment = environment
         self.scoreboard = environment.scoreboard
-        self.history = 
+        self.contexts : Dict[str, Tool] = {}
     
     @abstractmethod
     def pause(self):
@@ -24,15 +25,17 @@ class Agent(ABC):
         
     def step(self, output: str) -> str:
         # Parse output
-        regex = re.compile(r'<|(.*?)|>(.*)</|(.*?)|>')
-        match = regex.findall(output)
-        if len(match) > 1:
-            self.scoreboard.reward(settings.INVALID_TOOL_CALL_PENALTY, "More than 1 tool called")
+        try:
+            context, tool, tool_input = parse_llm_output(output)
+            if context not in self.contexts:
+                raise ToolNotExistException()
+            ctx = self.contexts[context]
+            tool_output = ctx.invoke(tool, tool_input)
+        except ToolCallException as e:
+            self.scoreboard.reward(e.penalty, str(e))
             return ""
-        elif len(match) == 1:
-            # Call tools
-            tool_name = match[0]
-    
+        return tool_output
+
     def interrupt(self, input: str):
         self.pause()
         self.invoke(input)

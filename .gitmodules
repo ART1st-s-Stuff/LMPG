@@ -4,3 +4,6 @@
 [submodule "OpenRLHF"]
 	path = OpenRLHF
 	url = https://github.com/OpenRLHF/OpenRLHF.git
+[submodule "MoBA"]
+	path = MoBA
+	url = https://github.com/MoonshotAI/MoBA.git
