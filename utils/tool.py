@@ -1,75 +1,80 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 import re
-from typing import List, Tuple, Callable, Literal, Dict, Any, TypeVar, Optional
+from typing import List, Tuple, Callable, Literal, Any, TypeVar, Optional, Dict, NamedTuple
 from functools import wraps
+import json
 
-import utils.settings as settings
-from utils.scoring import Scoreboard
+from . import settings
+from .scoring import Scoreboard
+from .exceptions import ToolNotExistException, MultipleToolCallException, InvalidToolException, InvalidToolCallJSONException
 
-T = TypeVar('T', bound='Tool')
-ToolFunction = Callable[[T, str, Scoreboard], str]
-class Tool(ABC):
-    @property
-    @abstractmethod
-    def interface(self) -> Dict[str, ToolFunction]:
-        ...
-        
-    def invoke(self, tool_name: str, tool_input: str, scoreboard: Scoreboard) -> str:
+T = TypeVar('T', bound='Toolset')
+ToolFunction = Callable[[T, str, str, Scoreboard], str]
+class Toolset(ABC):
+    interface : Dict[str, 'Toolset._ToolItem'] = {}
+    
+    class _ToolItem(NamedTuple):
+        prompt : str
+        func : ToolFunction
+
+    def invoke(self, context: str, tool_name: str, tool_input: str, _scoreboard: Scoreboard) -> str:
         if tool_name not in self.interface:
-            raise ToolNotExistException()
-        return self.interface[tool_name](tool_input, scoreboard)
+            raise ToolNotExistException(context, tool_name)
+        return self.interface[tool_name].func(self, context, tool_input, _scoreboard)
 
-    def structurized_tool(self, type: Optional[Literal["json", "yaml", "toml"]] = None):
-        if type is None:
-            type = settings.STRUCTURIZED_TOOL_INPUT_FORMAT
-        def wrapper(func: Callable[[...], Any]) -> ToolFunction:
+    @staticmethod
+    def tool(tool_name: Optional[str] = None, description: Optional[str] = None) -> Callable[[ToolFunction], ToolFunction]:
+        def wrapper(func: ToolFunction):
             @wraps(func)
-            def inner(tool_input: str, scoreboard: Scoreboard) -> str:
-                match type:
-                    case "json":
-                        import json
-                        kwargs = json.loads(tool_input)
-                    case "yaml":
-                        import yaml
-                        kwargs = yaml.load(tool_input)
-                    case "toml":
-                        import toml
-                        kwargs = toml.load(tool_input)
-                    case _:
-                        raise ValueError(f"Invalid type: {type}")
-                kwargs["scoreboard"] = scoreboard
-                return func(**kwargs)
+            def inner(self, context: str, tool_input: str, _scoreboard: Scoreboard) -> str:
+                name = tool_name or func.__name__
+                desc = description or func.__doc__ or ""
+                self.interface[name] = Toolset._ToolItem(desc, func)
+                return func(self, context, tool_input, _scoreboard)
             return inner
         return wrapper
-    
-class ToolCallException(Exception):
-    def __init__(self, message: str, penalty: float):
-        super().__init__("Tool Call Exception: " + message)
-        self.penalty = penalty
 
-class MultipleToolCallException(ToolCallException):
-    def __init__(self):
-        super().__init__("Calling more than 1 tools.", settings.INVALID_TOOL_CALL_PENALTY)
+    @staticmethod
+    def structurized_tool(tool_name: Optional[str] = None, description: Optional[str] = None, format: Optional[Literal["json", "yaml", "toml"]] = None, **kwargs):
+        if format is None:
+            format = settings.STRUCTURIZED_TOOL_INPUT_FORMAT
+        def wrapper(func: Callable[[...], Any]) -> ToolFunction:
+            desc = description or func.__doc__ or ""
+            desc += f"\nThe input arguments should be in {format} format."
+            @wraps(func)
+            def inner(self, tool_input: Any, _scoreboard: Scoreboard) -> str:
+                match format:
+                    case "json":
+                        _kwargs = tool_input
+                    case "yaml":
+                        import yaml
+                        _kwargs = yaml.load(tool_input)
+                    case "toml":
+                        import toml
+                        _kwargs = toml.load(tool_input)
+                    case _:
+                        raise ValueError(f"Invalid type: {format}")
+                _kwargs["scoreboard"] = _scoreboard
+                return func(self, **_kwargs)
+            return Toolset.tool(description=desc, tool_name=tool_name, **kwargs)(inner)
+        return wrapper
 
-class MismatchedTagException(ToolCallException):
-    def __init__(self):
-        super().__init__("Mismatched tool call tags.", settings.INVALID_TOOL_CALL_PENALTY)
-
-class ToolNotExistException(ToolCallException):
-    def __init__(self):
-        super().__init__("Tool does not exist.", settings.INVALID_TOOL_CALL_PENALTY)
-        
-class InvalidToolInputException(ToolCallException):
-    def __init__(self, input: str, expected: str):
-        super().__init__(f"Invalid tool input. Expected input: {expected}, Received: {input}", settings.INVALID_TOOL_CALL_PENALTY)
-
-def parse_llm_output(output: str) -> Tuple[str, str, str]:
-    regex = re.compile(r'<|(.*?)|>(.*)<|/(.*?)|>')
+def parse_llm_output(output: str) -> Tuple[Optional[str], Optional[str], Optional[str | Dict[str, Any]]]:
+    regex = re.compile(r'<tool_call>(.*?)</tool_call>', re.DOTALL)
     match : List[str] = regex.findall(output)
     if len(match) > 1:
         raise MultipleToolCallException()
+    if len(match) == 0:
+        return None, None, None
     tool_call = match[0]
-    if tool_call[0] != tool_call[2]:
-        raise MismatchedTagException()
-    tag = tool_call[0].split(":")
-    return tag[0], tag[1], tool_call[1]  # context, tool_name, tool_input
+    try:
+        # RWKV MITIGATION
+
+        tool_call = tool_call.replace("'", '"')
+
+        tool_call_json = json.loads(tool_call)
+        return tool_call_json["context"], tool_call_json["tool"], tool_call_json.get("args", {})
+    except Exception as e:
+        print(e)
+        raise InvalidToolCallJSONException()
+    

@@ -1,9 +1,9 @@
-[submodule "rwkv"]
-	path = rwkv
-	url = https://github.com/OpenMOSE/RWKV-LM-RLHF.git
-[submodule "OpenRLHF"]
-	path = OpenRLHF
-	url = https://github.com/OpenRLHF/OpenRLHF.git
-[submodule "MoBA"]
-	path = MoBA
-	url = https://github.com/MoonshotAI/MoBA.git
+[submodule "tasks/LIF/LIFBench-2024"]
+	path = tasks/LIF/LIFBench-2024
+	url = https://github.com/SheldonWu0327/LIFBench-2024.git
+[submodule "tasks/retrieval/LLMTest_NeedleInAHaystack"]
+	path = tasks/retrieval/LLMTest_NeedleInAHaystack
+	url = https://github.com/gkamradt/LLMTest_NeedleInAHaystack.git
+[submodule "models/rwkv/RWKV-PEFT"]
+	path = models/rwkv/RWKV-PEFT
+	url = https://github.com/Joluck/RWKV-PEFT.git
