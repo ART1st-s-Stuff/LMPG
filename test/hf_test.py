@@ -12,24 +12,24 @@ HINT = dedent(
     You can interact with the environment in a turn-based manner. In each turn, your
     output can contain at most 1 tool call. The tool call must be in the following
     format:
-        <tool_call>{ "context": "context name", "tool": "tool name", "args": (optional, in json format) }</tool_call>
+        <tool>{ "context": "context name", "tool": "tool name", "args": (optional, in json format) }</tool>
     You may also choose not to use any tools. All your output other than the tool call
     will be considered as your thinking process.
 
     You have a view of multiple windows. You can read the document and prompts through
     the windows. To access the windows, you can use the following operations:
-    - View a window: <tool_call>{ "context": "window name", "tool": "read" }</tool_call>
-    - Go to a specific segment: <tool_call>{ "context": "window name", "tool": "goto", "args": { "segment_number": int } }</tool_call>
+    - View a window: <tool>{ "context": "window name", "tool": "read" }</tool>
+    - Go to a specific segment: <tool>{ "context": "window name", "tool": "goto", "args": { "segment_number": int } }</tool>
 
     In this stage, you have access to the following windows:
-    - TEXT-default-hint: This hint.
+    - text-default-hint: This hint.
     - window_list: List of all the windows.
     
     You also have access to another tools:
     - end: End the task.
 
     Your task:
-    Step 1. Open the "TEXT-default-hint" window to read the hint again.
+    Step 1. Open the "text-default-hint" window to read the hint again.
     Step 2. Use the end tool to end the task.
     """
 )

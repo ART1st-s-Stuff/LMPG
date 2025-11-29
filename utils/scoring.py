@@ -46,8 +46,7 @@ class ExplicitScoreboard(Scoreboard):
             ret = f"Scoreboard {self.name}: No updates in this step."
         else:
             ret = f"Scoreboard {self.name}: {self.current_step_points:.2f} points.\nReasons: {self.format_reasons(self.reasons)}\n\n"
-        self.reasons.clear()
-        self.current_step_points = 0
+        self.reset_step()
         return ret
 
 class ImplicitScoreboard(Scoreboard):

@@ -175,13 +175,15 @@ class Agent(StateManagerMixin):
     def _call_tool(self, output: str) -> Optional[str]:
         # Parse output
         try:
-            context, tool, tool_input = parse_llm_output(output)
+            context, tool, tool_input = self._parse_llm_output(output)
             # First execute hook.
             hook_output = self._pre_tool_call_hook(output, context, tool, tool_input)
             if isinstance(hook_output, str):
                 return hook_output
             elif isinstance(hook_output, tuple):
                 context, tool, tool_input = hook_output
+                context = context.lower()
+                tool = tool.lower()
             if context is None:
                 # No tool call in this round. Skip.
                 return None
@@ -200,7 +202,7 @@ class Agent(StateManagerMixin):
             # Not internal tools. Try context tools.
             elif context in self.toolsets:
                 ctx = self.toolsets[context]
-                tool_output = ctx.invoke(context, tool, tool_input)
+                tool_output = ctx.invoke(tool, tool_input, context=context, scoreboard_manager=self.scoreboard_manager)
                 # If the output is a text window
                 if isinstance(tool_output, TextWindow):
                     if not tool_output.volatile:
@@ -247,17 +249,17 @@ class HFMixin(StateManagerMixin):
 
     def _to_chat_format(self, input: str | Dict[str, str]) -> str:
         if isinstance(input, dict):
-            input = [{"role": "assistant", "content": input["ai"]}]
+            chat = [{"role": "assistant", "content": input["ai"]}]
             user = ""
             if "environment" in input:
-                user += input["environment"] + "\n\n"
+                user += "Environment: \n" + input["environment"] + "\n\n"
             if "reward" in input:
-                user += input["reward"]
-            if user != "":
-                input.append({"role": "user", "content": user})
+                user += input["reward"] + "\n\n"
+            user += "Now begin your thinking process. You can choose to call one tool."
+            chat.append({"role": "user", "content": user})
         else:
-            input = [{"role": "user", "content": input}]
-        return input
+            chat = [{"role": "user", "content": input}]
+        return chat
 
     def tokenize(self, input: str | Dict[str, str]) -> torch.Tensor:
         input = self._to_chat_format(input)
@@ -276,9 +278,9 @@ class HFMixin(StateManagerMixin):
         self.history_state = None
 
     def _forward(self, input: str | Dict[str, str]) -> str:
-        logging.debug("=================[INPUT]====================")
-        logging.debug(input)
         chat, tokenized_input = self.tokenize(input)
+        logging.debug("=================[INPUT]====================")
+        logging.debug(chat)
         self.history_chat += chat
         if self.history_state is not None:
             full_input = torch.cat([self.history_state, tokenized_input.to(self.history_state.device)], dim=0)
@@ -289,7 +291,8 @@ class HFMixin(StateManagerMixin):
             full_input.to(self.model.device),
             attention_mask=torch.ones_like(full_input).to(self.model.device),
             generation_config=self.hf_config.GENERATION_CONFIG,
-            max_new_tokens=4096
+            max_new_tokens=4096,
+            pad_token_id=self.tokenizer.eos_token_id
         )
         self.history_state = output_tokens[0]
         output = output_tokens[0][full_input.shape[1]:]
@@ -318,7 +321,7 @@ class SFTAgent(Agent, Generic[T]):
         AUTO_SFT_CONFIG: Optional[SelectedSFTConfig] = field(default=None, metadata={'description': 'Configuration for automatic SFT training.'})
         AUTO_SFT_PERPLEXITY_THRESHOLD: float = field(default=0.0, metadata={'description': 'Threshold to stop SFT training. Set to positive value to enable.'})
 
-    def __init__(self, environment: Environment, sft_trainer: SelfSFT[T], config: Config):
+    def __init__(self, environment: Environment, sft_trainer: SelfSFT, config: Config):
         super().__init__(environment, config)
 
         if config.AUTO_SFT and config.AUTO_SFT_CONFIG is None:
@@ -375,7 +378,7 @@ class SFTHFAgent(HFMixin, SFTAgent[AutoModelForCausalLM]):
     class Config(SFTAgent.Config, HFMixin.Config):
         pass
 
-    def __init__(self, environment: Environment, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, sft_trainer: SelfSFT[AutoModelForCausalLM], config: Config):
+    def __init__(self, environment: Environment, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, sft_trainer: SelfSFT, config: Config):
         super().__init__(model=model, tokenizer=tokenizer, hf_config=config, environment=environment, sft_trainer=sft_trainer, config=config)
 
     def _forward(self, input: str | Dict[str, str]) -> str:

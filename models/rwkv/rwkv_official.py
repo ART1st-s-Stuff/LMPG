@@ -269,7 +269,7 @@ class RWKVSelfSFT(SelfSFT[RWKV]):
         return self.model
 
     def _parse_llm_output(self, output: str) -> Tuple[Optional[str], Optional[str], Optional[str | Dict[str, Any]]]:
-        regex = re.compile(r'<tool_call>(.*?)</tool_call>', re.DOTALL)
+        regex = re.compile(r'<tool>(.*?)</tool>', re.DOTALL)
         extracted = regex.findall(output)
         if len(extracted) == 0:
             return None, None, None

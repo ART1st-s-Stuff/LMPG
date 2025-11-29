@@ -13,7 +13,7 @@ class FileIO(Toolset):
         self.opened_files : Dict[str, TextWindow] = {}
 
     @Toolset.structurized_tool()
-    def create_file(self, filename: str, _scoreboard: Scoreboard) -> str:
+    def create_file(self, filename: str) -> str:
         """Creates an empty file with the given filename.
         
         Args:
@@ -28,7 +28,7 @@ class FileIO(Toolset):
             return f"Failed to create file {filename} due to {e}"
     
     @Toolset.structurized_tool()
-    def open_file(self, filename: str, _scoreboard: Scoreboard) -> TextWindow | str:
+    def open_file(self, filename: str) -> TextWindow | str:
         """Open a window of the file.
         
         Args:
@@ -45,7 +45,7 @@ class FileIO(Toolset):
             return f"Failed to open file {filename} due to {e}"
 
     @Toolset.structurized_tool()
-    def close_file(self, filename: str, _scoreboard: Scoreboard) -> str:
+    def close_file(self, filename: str) -> str:
         """Close the opened file window.
         
         Args:
@@ -56,7 +56,7 @@ class FileIO(Toolset):
         del self.opened_files[filename]
         return f"Closed file {filename}."
 
-    def apply_patch(self, filename: str, patch: str, _scoreboard: Scoreboard) -> str:
+    def apply_patch(self, filename: str, patch: str) -> str:
         """Modify the file by applying a patch. The file will be saved immediately.
         
         Args:
@@ -75,7 +75,7 @@ class FileIO(Toolset):
         except Exception as e:
             return f"Failed to apply patch to {filename} due to {e}"
 
-    def delete_file(self, filename: str, _scoreboard: Scoreboard) -> str:
+    def delete_file(self, filename: str) -> str:
         """Delete a file. Will close the file window if it is opened.
         
         Args:
@@ -83,7 +83,7 @@ class FileIO(Toolset):
         """
         try:
             if filename in self.opened_files:
-                self.close_file(filename, scoreboard)
+                self.close_file(filename)
             filepath = os.path.join(self.working_dir, filename)
             if os.path.exists(filepath):
                 os.remove(filepath)
@@ -93,7 +93,7 @@ class FileIO(Toolset):
         except Exception as e:
             return f"Failed to delete file {filename} due to {e}"
 
-    def list_files(self, dir: str, _scoreboard: Scoreboard) -> TextWindow:
+    def list_files(self, dir: str) -> TextWindow:
         """List all files in the working directory.
 
         Args:

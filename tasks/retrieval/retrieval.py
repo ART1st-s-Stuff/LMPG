@@ -20,19 +20,19 @@ HINT_TRAIN = dedent(
     You can interact with the environment in a turn-based manner. In each turn, your
     output can contain at most 1 tool call. The tool call must be in the following
     format:
-        <tool_call>{ "context": "context name", "tool": "tool name", "args": (optional, in json format) }</tool_call>
+        <tool>{ "context": "context name", "tool": "tool name", "args": (optional, in json format) }</tool>
     You may also choose not to use any tools. All your output other than the tool call
     will be coonsidered as your thinking process.
 
     You have a view of multiple windows. You can read the document and prompts through
     the windows. To access the windows, you can use the following operations:
-    - View a window: <tool_call>{ "context": "window name", "tool": "read" }</tool_call>
-    - Go to a specific segment: <tool_call>{ "context": "window name", "tool": "goto", "args": { "segment_number": int } }</tool_call>
+    - View a window: <tool>{ "context": "window name", "tool": "read" }</tool>
+    - Go to a specific segment: <tool>{ "context": "window name", "tool": "goto", "args": { "segment_number": int } }</tool>
 
     In this stage, you have access to the following windows:
-    - TEXT-default-hint: This hint.
-    - TEXT-default-task: The task description.
-    - TEXT-default-document: The document.
+    - text-default-hint: This hint.
+    - text-default-task: The task description.
+    - text-default-document: The document.
     - window_list: List of all the windows.
     
     You also have access to some tools:
@@ -46,8 +46,8 @@ HINT_TRAIN = dedent(
     Do not output too much in a single turn. The output limit is ~500 tokens. You may
     receive a penalty if you do so.
 
-    It is suggested to first open the "TEXT-default-task" window to read the task:
-        <tool_call>{ "context": "TEXT-default-task", "tool": "read" }</tool_call>
+    It is suggested to first open the "text-default-task" window to read the task:
+        <tool>{ "context": "text-default-task", "tool": "read" }</tool>
 
     Try to achieve higher score in the task.
     """
@@ -72,14 +72,14 @@ class Output(Toolset):
         self.gt_label = gt_label
 
     @Toolset.structurized_tool()
-    def output(self, content: str, _scoreboard: Scoreboard):
+    def output(self, content: str, _scoreboard_manager: ScoreboardManager):
         """Use this tool to output the result."""
         print(f"Agent: {content}")
         self.result = content
         if self.result == self.gt_label:
-            _scoreboard.reward(100, "Correct answer.")
+            _scoreboard_manager.get_scoreboard().reward(100, "Correct answer.")
         else:
-            _scoreboard.reward(0, "Incorrect answer.")
+            _scoreboard_manager.get_scoreboard().reward(0, "Incorrect answer.")
 
 def build_one_task(prompt: str, text: str, label: str):
     return ManualStoppingEnvironment(

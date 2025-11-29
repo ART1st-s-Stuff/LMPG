@@ -1,37 +1,67 @@
 from abc import ABC
 import re
-from typing import List, Tuple, Callable, Literal, Any, TypeVar, Optional, Dict, NamedTuple
+from typing import List, Tuple, Callable, Literal, Any, TypeVar, Optional, Dict, NamedTuple, Generic
 from functools import wraps
 import json
+from collections import ChainMap
 
 from . import settings
-from .scoring import Scoreboard
+from .scoring import ScoreboardManager
 from .exceptions import ToolNotExistException, MultipleToolCallException, InvalidToolException, InvalidToolCallJSONException
+from .args import tool_args_guard
+
 
 T = TypeVar('T', bound='Toolset')
-ToolFunction = Callable[[T, str, str, Scoreboard], str]
-class Toolset(ABC):
-    interface : Dict[str, 'Toolset._ToolItem'] = {}
-    
-    class _ToolItem(NamedTuple):
-        prompt : str
-        func : ToolFunction
+ToolFunction = Callable[[T, str, Any, ScoreboardManager], str]
 
-    def invoke(self, context: str, tool_name: str, tool_input: str, _scoreboard: Scoreboard) -> str:
-        if tool_name not in self.interface:
+class __ToolsetMeta(type(ABC)):
+    def __new__(mcs, name, bases, attrs, /, **kwargs):
+        cls = super().__new__(mcs, name, bases, attrs, **kwargs)
+        cls_interface : Dict[str, ToolItem] = {}
+        for name, attr in attrs.items():
+            if hasattr(attr, "__is_tool__"):
+                cls_interface[attr.__tool_name__] = attr
+        cls_mro_interface = ChainMap(cls_interface, *[ pcls.__cls_interface__ for pcls in cls.__mro__ if hasattr(pcls, "__cls_interface__") ])
+        cls.__cls_interface__ = cls_mro_interface
+        return cls
+
+class ToolsetInterfaceIterator:
+    def __init__(self, interface_funcs):
+        self.iter = iter(interface_funcs.items())
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> Tuple[str, str, ToolFunction]:
+        name, func = self.iter.__next__()
+        return name, func.__tool_desc__, func
+
+class Toolset(metaclass=__ToolsetMeta):
+    def __init__(self):
+        self.__interface__ = dict(self.__class__.__cls_interface__)
+
+    @property
+    def interface(self):
+        return ToolsetInterfaceIterator(self.__interface__)
+
+    def invoke(self, tool_name: str, tool_input: Any, context: str, scoreboard_manager: ScoreboardManager) -> str:
+        key = tool_name.lower()
+        if key not in self.__interface__:
             raise ToolNotExistException(context, tool_name)
-        return self.interface[tool_name].func(self, context, tool_input, _scoreboard)
+        func = self.__interface__[key]
+        return func(self, tool_input, _context=context, _scoreboard_manager=scoreboard_manager)
 
     @staticmethod
     def tool(tool_name: Optional[str] = None, description: Optional[str] = None) -> Callable[[ToolFunction], ToolFunction]:
         def wrapper(func: ToolFunction):
-            @wraps(func)
-            def inner(self, context: str, tool_input: str, _scoreboard: Scoreboard) -> str:
-                name = tool_name or func.__name__
-                desc = description or func.__doc__ or ""
-                self.interface[name] = Toolset._ToolItem(desc, func)
-                return func(self, context, tool_input, _scoreboard)
-            return inner
+            func.__is_tool__ = True
+            func.__tool_name__ = (tool_name or func.__name__).lower()
+            func.__tool_desc__ = description or func.__doc__ or ""
+            print(f"Adding interface {tool_name or func.__name__}")
+            # @wraps(func)
+            # def inner(self, context: str, tool_input: str, _scoreboard: Scoreboard) -> str:
+            #     return func(self, context, tool_input, _scoreboard)
+            return func
         return wrapper
 
     @staticmethod
@@ -42,7 +72,7 @@ class Toolset(ABC):
             desc = description or func.__doc__ or ""
             desc += f"\nThe input arguments should be in {format} format."
             @wraps(func)
-            def inner(self, tool_input: Any, _scoreboard: Scoreboard) -> str:
+            def inner(self, tool_input: Any, _context: str, _scoreboard_manager: ScoreboardManager) -> str:
                 match format:
                     case "json":
                         _kwargs = tool_input
@@ -54,13 +84,15 @@ class Toolset(ABC):
                         _kwargs = toml.load(tool_input)
                     case _:
                         raise ValueError(f"Invalid type: {format}")
-                _kwargs["scoreboard"] = _scoreboard
+                _kwargs["_context"] = _context
+                _kwargs["_scoreboard_manager"] = _scoreboard_manager
+                tool_args_guard(func, tool_input)
                 return func(self, **_kwargs)
             return Toolset.tool(description=desc, tool_name=tool_name, **kwargs)(inner)
         return wrapper
 
 def parse_llm_output(output: str) -> Tuple[Optional[str], Optional[str], Optional[str | Dict[str, Any]]]:
-    regex = re.compile(r'<tool_call>(.*?)</tool_call>', re.DOTALL)
+    regex = re.compile(r'<tool>(.*?)</tool>', re.DOTALL)
     match : List[str] = regex.findall(output)
     if len(match) > 1:
         raise MultipleToolCallException()
@@ -68,10 +100,6 @@ def parse_llm_output(output: str) -> Tuple[Optional[str], Optional[str], Optiona
         return None, None, None
     tool_call = match[0]
     try:
-        # RWKV MITIGATION
-
-        tool_call = tool_call.replace("'", '"')
-
         tool_call_json = json.loads(tool_call)
         return tool_call_json["context"], tool_call_json["tool"], tool_call_json.get("args", {})
     except Exception as e:

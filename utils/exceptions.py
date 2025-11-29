@@ -21,9 +21,9 @@ class ToolNotExistException(ToolCallException):
     def __init__(self, context: str, interface: str):
         super().__init__(f"Interface `{interface}` does not exist in context `{context}`.", settings.INVALID_TOOL_CALL_PENALTY)
         
-class InvalidToolInputException(ToolCallException):
-    def __init__(self, input: str, expected: str):
-        super().__init__(f"Invalid tool input. Expected input: `{expected}`, Received: `{input}`", settings.INVALID_TOOL_CALL_PENALTY)
+class InvalidToolArgsException(ToolCallException):
+    def __init__(self, text: str):
+        super().__init__(f"Invalid tool args: {text}", settings.INVALID_TOOL_CALL_PENALTY)
 
 class ContextNotExistException(ToolCallException):
     def __init__(self, context: str):

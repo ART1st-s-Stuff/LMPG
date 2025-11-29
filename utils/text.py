@@ -4,6 +4,7 @@ from textwrap import dedent
 
 from . import settings
 from .exceptions import ToolNotExistException
+from .args import tool_args_guard
 
 class TextWindow(ABC):
     def __init__(self, window_id: str, interface_prefix: str, volatile: bool = False):
@@ -13,7 +14,10 @@ class TextWindow(ABC):
 
     def invoke(self, tool: str, tool_input: Dict[str, Any]) -> str:
         if tool in self.interface:
-            return self.interface[tool](**tool_input)
+            func = self.interface[tool.lower()]
+            # Do not exclude self, since it is already excluded
+            tool_args_guard(func, tool_input, exclude_self=False)
+            return func(**tool_input)
         else:
             raise ToolNotExistException(self.window_name, tool)
 
@@ -90,7 +94,7 @@ class SegmentTextWindow(TextWindow):
 
     @property
     def window_name(self) -> str:
-        return f"TEXT-{self._window_name}"
+        return f"text-{self._window_name}"
 
 class FileTextWindow(TextWindow):
     LINES_IN_A_WINDOW = 40

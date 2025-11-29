@@ -5,8 +5,8 @@ from trl import SFTTrainer, SFTConfig
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from datasets import Dataset
 
-from utils.tool import Toolset
-from utils.exceptions import InvalidToolInputException
+from utils.tool import Toolset, __ToolsetMeta
+from utils.exceptions import InvalidToolArgsException
 from utils.scoring import Scoreboard
 
 class SelectedSFTConfig(TypedDict):
@@ -20,8 +20,8 @@ class SelectedSFTConfig(TypedDict):
             return False
         return True
 
-T = TypeVar('T', bound=Any)
-class SelfSFT(Toolset, Generic[T]):
+#T = TypeVar('T', bound=Any)
+class SelfSFT(Toolset):
     def __init__(self):
         super().__init__()
         self.changed = False
@@ -31,11 +31,11 @@ class SelfSFT(Toolset, Generic[T]):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_model(self) -> T:
+    def get_model(self):
         raise NotImplementedError()
 
     @Toolset.structurized_tool(tool_name="memorize")
-    def tool_memorize(self, content: str, config: SelectedSFTConfig, _scoreboard: Scoreboard) -> None:
+    def tool_memorize(self, content: str, config: SelectedSFTConfig) -> None:
         """Memorize the given content.
 
         Args:
@@ -43,11 +43,11 @@ class SelfSFT(Toolset, Generic[T]):
             config, object: Specify configurations for the SFT training. The modifiable fields are:
                 config.learning_rate, float: The learning rate for the SFT training.
         """
-        return self.memorize(content, config, _scoreboard)
+        return self.memorize(content, config)
     
-    def memorize(self, content: str, config: SelectedSFTConfig, _scoreboard: Scoreboard) -> None:
+    def memorize(self, content: str, config: SelectedSFTConfig) -> None:
         if not SelectedSFTConfig.validate(config):
-            raise InvalidToolInputException(input=f"config: {config}", expected="""config.learning_rate, float: The learning rate for the SFT trainer.""")
+            raise InvalidToolArgsException(f"Expected argumant config: {{ \"learning_rate\" : \"float: The learning rate for the SFT trainer.\" }}, got {config}")
         self.train([{"text": content}], config)
 
     def reset_changed(self):

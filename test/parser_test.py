@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import json
 
 def parse_llm_output(output: str) -> Tuple[Optional[str], Optional[str], Optional[str | Dict[str, Any]]]:
-    regex = re.compile(r'<tool_call>(.*?)</tool_call>', re.DOTALL)
+    regex = re.compile(r'<tool>(.*?)</tool>', re.DOTALL)
     match : List[str] = regex.findall(output)
     if len(match) > 1:
         raise MultipleToolCallException()
@@ -18,6 +18,6 @@ def parse_llm_output(output: str) -> Tuple[Optional[str], Optional[str], Optiona
     
 
 if __name__ == "__main__":
-    output = """🤔 I'm going to open the "TEXT-default-hint" window to read the hint again and then use the end tool to end the task.
-<tool_call>{'context': 'TEXT-default-hint', 'tool': 'read'}</tool_call>"""
+    output = """🤔 I'm going to open the "text-default-hint" window to read the hint again and then use the end tool to end the task.
+<tool>{'context': 'text-default-hint', 'tool': 'read'}</tool>"""
     print(parse_llm_output(output))
