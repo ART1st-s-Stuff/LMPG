@@ -6,6 +6,7 @@ import json
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 import torch
+from peft import LoraConfig
 
 MODEL = AutoModelForCausalLM.from_pretrained("./models/arwkv", trust_remote_code=True, torch_dtype=torch.bfloat16).cuda()
 TOKENIZER = AutoTokenizer.from_pretrained("./models/arwkv", trust_remote_code=True)
@@ -17,7 +18,13 @@ if __name__ == "__main__":
     tasks = [build_one_task() for _ in range(100)]
     for task in tasks:
         agent = SFTHFAgent(task, MODEL, TOKENIZER,
-            SelfSFT_TRL(MODEL, TOKENIZER),
+            SelfSFT_TRL(MODEL, TOKENIZER, peft_config=LoraConfig(
+                r=16,
+                lora_alpha=32,
+                lora_dropout=0.05,
+                bias="none",
+                task_type="CAUSAL_LM",
+            )),
             SFTHFAgent.Config(
                 TELL_REWARD_AFTER_EACH_ROUND=True,
                 AUTO_SFT=False,

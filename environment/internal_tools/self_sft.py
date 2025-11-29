@@ -1,4 +1,4 @@
-from typing import TypedDict, Dict, Any, Generic, TypeVar
+from typing import TypedDict, Dict, Any, Optional
 from abc import abstractmethod
 
 from trl import SFTTrainer, SFTConfig
@@ -54,16 +54,22 @@ class SelfSFT(Toolset):
         self.changed = False
 
 class SelfSFT_TRL(SelfSFT):
-    def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, config: Dict[str, Any] = {}):
+    def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, sft_config: Dict[str, Any] = {}, peft_config: Optional[Dict[str, Any]] = None):
         super().__init__()
-        self.config = config
+        self.sft_config = sft_config
+        self.peft_config = peft_config
         self.tokenizer = tokenizer
         self.model = model
 
     def train(self, dataset, config: SelectedSFTConfig) -> None:
-        config_dict = self.config
+        config_dict = self.sft_config
         config_dict.update(config)
-        trainer = SFTTrainer(self.model, SFTConfig(**config_dict), train_dataset=Dataset.from_list([{"messages":dataset}]), processing_class=self.tokenizer)
+        trainer = SFTTrainer(
+            model=self.model, args=SFTConfig(**config_dict),
+            train_dataset=Dataset.from_list([{"messages":dataset}]),
+            processing_class=self.tokenizer,
+            peft_config=self.peft_config
+        )
         trainer.train()
         self.model = trainer.model
         self.changed = True

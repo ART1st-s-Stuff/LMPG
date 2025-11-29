@@ -17,7 +17,7 @@ ToolFunction = Callable[[T, str, Any, ScoreboardManager], str]
 class __ToolsetMeta(type(ABC)):
     def __new__(mcs, name, bases, attrs, /, **kwargs):
         cls = super().__new__(mcs, name, bases, attrs, **kwargs)
-        cls_interface : Dict[str, ToolItem] = {}
+        cls_interface : Dict[str, ToolFunction] = {}
         for name, attr in attrs.items():
             if hasattr(attr, "__is_tool__"):
                 cls_interface[attr.__tool_name__] = attr
