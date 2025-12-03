@@ -3,11 +3,13 @@ import inspect
 
 from .exceptions import InvalidToolArgsException
 
-def tool_args_guard(func: Callable[[...], Any], args: Dict[str, Any], exclude_self: bool = True):
+def tool_args_guard(func: Callable[[...], Any], args: Dict[str, Any] | Any, exclude_self: bool = True):
     """Check if the tool args satisfied function signature.
     
     Automatically removes _context and _scoreboard_manager if not exists.
     """
+    if not isinstance(args, dict):
+        raise InvalidToolArgsException("args should be a JSON object.")
     sig = inspect.signature(func)
     if exclude_self:
         func_params_list = list(sig.parameters.items())[1:]
