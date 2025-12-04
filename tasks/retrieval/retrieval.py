@@ -5,59 +5,37 @@ from typing import Optional
 import re
 
 from utils.tool import Toolset
-from utils.environment import ManualStoppingEnvironment
-from utils.scoring import DefaultScoreboardManager, Scoreboard
+from utils.environment import Environment
+from utils.scoring import ScoreboardManager, DefaultScoreboardManager
 from utils.agent import SFTAgent
 
 import utils.settings as settings
 
-HINT_TRAIN = dedent(
+PROMPT = dedent(
     """
-    You are an agent in the training process. Your ultimate goal is to effectively
-    complete various types of tasks. Now, you are in training stage 1: learning to
-    use the tools efficiently.
+    Task:
+    Answer the question {question} according to the document in the "document" window.
+    Use output tool to output the result. Your output should be a straight forward answer:
 
-    You can interact with the environment in a turn-based manner. In each turn, your
-    output can contain at most 1 tool call. The tool call must be in the following
-    format:
-        <tool>{ "context": "context name", "tool": "tool name", "args": (optional, in json format) }</tool>
-    You may also choose not to use any tools. All your output other than the tool call
-    will be coonsidered as your thinking process.
+    Example question:
+    Micheal de Santa accidentally destroyed whose house?
+    Example answer:
+    Martin Madrazo
 
+    Hints:
     You have a view of multiple windows. You can read the document and prompts through
-    the windows. To access the windows, you can use the following operations:
-    - View a window: <tool>{ "context": "window name", "tool": "read" }</tool>
-    - Go to a specific segment: <tool>{ "context": "window name", "tool": "goto", "args": { "segment_number": int } }</tool>
+    the windows. To access the windows, you can use the following parameters in the tool call:
+    - View a window: <tool>{{ "context": "window name", "tool": "read" }}</tool>
+    - Go to a specific segment: <tool>{{ "context": "window name", "tool": "goto", "args": {{ "segment_number": int }} }}</tool>
 
-    In this stage, you have access to the following windows:
-    - text-default-hint: This hint.
-    - text-default-task: The task description.
-    - text-default-document: The document.
-    - window_list: List of all the windows.
-    
-    You also have access to some tools:
-    - output: Output the result.
-    - end: End the task.
-    - self_sft: Self-supervised training. You can use this tool to train yourself.
-                Through SFT, you can memorize some useful information. You may summarize
-                some useful information after finishing the task, and call this tool
-                to memorize it.
+    You have access to the following windows:
+    - prompt: The prompt of the task, this window.
+    - document: The document of the task.
 
-    Do not output too much in a single turn. The output limit is ~500 tokens. You may
-    receive a penalty if you do so.
-
-    It is suggested to first open the "text-default-task" window to read the task:
-        <tool>{ "context": "text-default-task", "tool": "read" }</tool>
-
-    Try to achieve higher score in the task.
-    """
-)
-
-TASK_PROMPT = dedent(
-    """
-    Answer the question based on the given document (in window "document").
-
-    Question: {question}
+    You have access to the following tool:
+    - output: Output the result. 
+      - context "output" and tool "output"
+      - args: {{ "content": str }}
     """
 )
 
@@ -81,28 +59,28 @@ class Output(Toolset):
         else:
             _scoreboard_manager.get_scoreboard().reward(0, "Incorrect answer.")
 
-def build_one_task(prompt: str, text: str, label: str):
-    return ManualStoppingEnvironment(
+def build_one_task(prompt: str, text: str, label: str, tokenizer):
+    token_length = tokenizer([text], return_tensors="pt").input_ids.shape[1]
+    output = Output(label)
+    return Environment(
         tools={
-            "output": Output(label)
+            "output": output
         },
         scoreboard_manager=DefaultScoreboardManager(),
         prompt={
-            "hint": HINT_TRAIN,
-            "task": TASK_PROMPT.format(question=prompt),
+            "prompt": PROMPT.format(question=prompt),
             "document": text,
         },
-        max_steps=500
+        max_steps=2 * token_length // settings.TEXT_WINDOW_SEGMENT_LENGTH + 20,
+        stop_criteria=lambda _: output.result is not None
     )
 
-def build_tasks(num: int):
+def build_tasks(num: int, TOKENIZER):
     data = DATASET[:num]
-    tasks = [build_one_task(prompt, text, label) for prompt, text, label in data]
+    tasks = [build_one_task(prompt, text, label, TOKENIZER) for prompt, text, label in data]
     return tasks
 
-def long_thinking_penalty_hook(instance: SFTAgent, model_output: str, context: Optional[str], tool: Optional[str], tool_input: Optional[str]) -> Optional[str]:
-    regex = re.compile(r'<[(.*?)]>(.*)<[/(.*?)]>')
-    output = re.sub(regex, r'', model_output)
-    token_length = instance.tokenizer([output], return_tensors="pt").input_ids.shape[1]
+def long_thinking_penalty_hook(instance, model_output: str, context: Optional[str], tool: Optional[str], tool_input: Optional[str]) -> Optional[str]:
+    token_length = instance.tokenizer([model_output], return_tensors="pt").input_ids.shape[1]
     if token_length > 400:
         instance.scoreboard_manager.get_scoreboard().reward(-2.0, "Thinking process length exceeds 400 tokens.")

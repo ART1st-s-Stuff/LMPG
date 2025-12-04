@@ -29,6 +29,13 @@ LORA_CONFIG = LoraConfig(
             )
 PEFT_MODEL = get_peft_model(MODEL, LORA_CONFIG)
 
+AUXILLIARY_CHAT_1 = [
+    {"role" : "assistant", "content": 'If I forget the initial prompt, then I should alway take a look at window "text-default-prompt".'}
+]
+AUXILLIARY_CHAT_2 = [
+    {"role" : "assistant", "content": 'If I want to see all opened windows, then I should alway take a look at window "opened_windows".'}
+]
+
 #MODEL = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-8B", trust_remote_code=True, torch_dtype=torch.bfloat16).cuda()
 #TOKENIZER = AutoTokenizer.from_pretrained("Qwen/Qwen3-8B", trust_remote_code=True)
 
@@ -61,8 +68,12 @@ if __name__ == "__main__":
             print("✅ Agent successfully completed the task. Training the agent...")
             agent.sft_trainer.train(agent.history_chat, {"learning_rate": 3e-5})
             if len(scores) > 20:
-                PEFT_MODEL.save_pretrained('./models/arwkv-stage-1')
                 print(scores)
+                print("Training on aux dataset...")
+                for _ in range(20):
+                    agent.sft_trainer.train(AUXILLIARY_CHAT_1, {"learning_rate": 3e-5})
+                    agent.sft_trainer.train(AUXILLIARY_CHAT_2, {"learning_rate": 3e-5})
+                PEFT_MODEL.save_pretrained('./models/arwkv-stage-1')
                 break
         else:
             print("❌ Agent failed to complete the task. Skipping training.")

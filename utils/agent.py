@@ -247,6 +247,16 @@ class HFMixin(StateManagerMixin):
         self.hf_config = hf_config
         super().__init__(**kwargs)
 
+    @staticmethod
+    def _debug_output(title: str, content: Any):
+        logging.debug(f"=================[{title}]====================")
+        s = content if isinstance(content, str) else str(content)
+        if len(s) > 200:
+            logging.debug(s[:200] + "...")
+            logging.debug(f"Total output length: {len(s)}")
+        else:
+            logging.debug(s)
+
     def _to_chat_format(self, input: str | Dict[str, str]) -> str:
         if isinstance(input, dict):
             chat = [{"role": "assistant", "content": input["ai"]}]
@@ -255,7 +265,7 @@ class HFMixin(StateManagerMixin):
                 user += "Environment: \n" + input["environment"] + "\n\n"
             if "reward" in input:
                 user += input["reward"] + "\n\n"
-            user += "Now begin your thinking process. You can choose to call one tool."
+            user += "Now begin your thinking process. First think what to do next, then optionally call one tool using <tool></tool>."
             chat.append({"role": "user", "content": user})
         else:
             chat = [{"role": "user", "content": input}]
@@ -279,8 +289,7 @@ class HFMixin(StateManagerMixin):
 
     def _forward(self, input: str | Dict[str, str]) -> str:
         chat, tokenized_input = self.tokenize(input)
-        logging.debug("=================[INPUT]====================")
-        logging.debug(chat)
+        self._debug_output("INPUT", chat)
         self.history_chat += chat
         if self.history_state is not None:
             full_input = torch.cat([self.history_state, tokenized_input.to(self.history_state.device)], dim=0)
@@ -297,8 +306,7 @@ class HFMixin(StateManagerMixin):
         self.history_state = output_tokens[0]
         output = output_tokens[0][full_input.shape[1]:]
         output_str = self.detokenize(output)
-        logging.debug("=================[OUTPUT]===================")
-        logging.debug(output_str)
+        self._debug_output("INPUT", output_str)
         return output_str
 
 T = TypeVar('T', bound=Any)

@@ -2,6 +2,8 @@ from textwrap import dedent
 import os
 import json
 from typing import Dict
+import random
+import string
 
 from utils.tool import Toolset
 from utils.environment import Environment
@@ -19,9 +21,9 @@ HINT_TRAIN = dedent(
 
     Example output 1:
     ```
-    I have finished step 1, but I have forgotten the next step to do. I need to open the hint
+    I have finished step 1, but I have forgotten the next step to do. I need to open the prompt
     again to decide my next action.
-    <tool>{ "context": "text-default-hint", "tool": "read" }</tool>
+    <tool>{ "context": "text-default-prompt", "tool": "read" }</tool>
     ```
     Example output 2:
     ```
@@ -46,8 +48,8 @@ HINT_TRAIN = dedent(
     - Go to a specific segment: <tool>{ "context": "window name", "tool": "goto", "args": { "segment_number": int } }</tool>
 
     In this stage, you have access to the following windows:
-    - text-default-hint: This hint.
-    - text-default-step1: The window you should open in step 1. It tells you what to do next.
+    - text-default-prompt: This prompt.
+    - text-default-<window_name>: The window you should open in step 1. It tells you what to do next.
 
     Your task:
     Step 1. Open the "text-default-step1" window, and follow the instruction there.
@@ -70,14 +72,14 @@ HINT_RWKV_OFFICIAL = dedent(
     - Go to a specific segment: { "context": "window name", "tool": "goto", "args": { "segment_number": int } }
 
     In this stage, you have access to the following windows:
-    - text-default-hint: This hint.
+    - text-default-prompt: This prompt.
     - window_list: List of all the windows.
     
     You also have access to another tools:
     - end: End the task.
 
     Your task:
-    Step 1. Open the "text-default-step1" window.
+    Step 1. Open the "<window_name>" window.
     Step 2. Use the end tool to end the task.
 
     Tool call specification:
@@ -116,7 +118,10 @@ HINT_RWKV_OFFICIAL = dedent(
 HINT_STEP1 = dedent(
     """
     You finished step 1 of the task.
-    Continue to step 2: Use the "stop" tool to end the task. It has context "stop" and tool "stop".
+
+    You should output the result "<result_str>"
+
+    Continue to step 2: Use the "output" tool to output the result and end the task. It has context "output" and tool "output", its args schema is { "content" : "str output" }.
     """
 )
 
@@ -129,29 +134,37 @@ TASK_PROMPT = dedent(
 )
 
 
-class Stop(Toolset):
-    def __init__(self):
+class Output(Toolset):
+    def __init__(self, gt):
         super().__init__()
         self.stopped = False
+        self.gt = gt
     
     @Toolset.structurized_tool()
-    def stop(self, _scoreboard_manager: ScoreboardManager):
-        """Use this tool to end the task."""
+    def output(self, content: str, _scoreboard_manager: ScoreboardManager):
+        """Use this tool output the result and to end the task."""
         self.stopped = True
-        _scoreboard_manager.get_scoreboard().reward(1000)
+        if content == self.gt:
+            _scoreboard_manager.get_scoreboard().reward(1000)
 
 class ManualStoppingEnvironment(Environment):
-    def __init__(self, tools: Dict[str, Toolset], scoreboard_manager: ScoreboardManager, prompt: Dict[str, str], max_steps: int):
-        stop_tool = Stop()
-        super().__init__({ **tools, "stop": stop_tool }, scoreboard_manager, prompt, lambda x: stop_tool.stopped, max_steps)
+    def __init__(self, tools: Dict[str, Toolset], scoreboard_manager: ScoreboardManager, prompt: Dict[str, str], max_steps: int, gt_label: str):
+        output_tool = Output(gt_label)
+        super().__init__({ **tools, "output": output_tool }, scoreboard_manager, prompt, lambda x: output_tool.stopped, max_steps)
+
+def gen_rand_str(length):
+    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
 
 def build_one_task():
+    window_name = gen_rand_str(8)
+    result_str = gen_rand_str(32)
     return ManualStoppingEnvironment(
         tools={},
         scoreboard_manager=DefaultScoreboardManager(),
         prompt={
-            "hint": HINT_TRAIN,
-            "step1": HINT_STEP1,
+            "prompt": HINT_TRAIN.replace("<window_name>", window_name),
+            window_name: HINT_STEP1.replace("<result_str>", result_str),
         },
-        max_steps=5
+        max_steps=5,
+        gt_label=result_str
     )
