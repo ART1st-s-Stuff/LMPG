@@ -1,7 +1,7 @@
 from textwrap import dedent
 import os
 import json
-from typing import Optional
+from typing import Optional, Dict
 import re
 
 from utils.tool import Toolset
@@ -14,7 +14,7 @@ import utils.settings as settings
 PROMPT = dedent(
     """
     Task:
-    Answer the question {question} according to the document in the "document" window.
+    Answer the question {question} according to the document in the "text-default-document" window.
     Use output tool to output the result. Your output should be a straight forward answer:
 
     Example question:
@@ -22,20 +22,28 @@ PROMPT = dedent(
     Example answer:
     Martin Madrazo
 
+
     Hints:
+    You can interact with the environment in a turn-based manner. In each turn, your
+    output can contain at most 1 tool call. You must wrap the tool call within <tool></tool>
+    tags, and follow the following specification:
+    <tool>{{ "context": "context name", "tool": "tool name", "args": (in json format, can be empty) }}</tool>
+    The "context" and "tool" fields are case sensitive. You need to follow the task-specific instructions 
+    of tool args schema.
+
     You have a view of multiple windows. You can read the document and prompts through
     the windows. To access the windows, you can use the following parameters in the tool call:
-    - View a window: <tool>{{ "context": "window name", "tool": "read" }}</tool>
+    - View a window: <tool>{{ "context": "window name", "tool": "read", "args": {{}} }}</tool>
     - Go to a specific segment: <tool>{{ "context": "window name", "tool": "goto", "args": {{ "segment_number": int }} }}</tool>
 
     You have access to the following windows:
-    - prompt: The prompt of the task, this window.
-    - document: The document of the task.
+    - text-default-prompt: The prompt of the task, this window.
+    - text-default-document: The document of the task.
 
     You have access to the following tool:
     - output: Output the result. 
       - context "output" and tool "output"
-      - args: {{ "content": str }}
+      - usage: <tool>{{ "context": "output", "tool": "output", "content": str }}</tool>
     """
 )
 
@@ -59,6 +67,11 @@ class Output(Toolset):
         else:
             _scoreboard_manager.get_scoreboard().reward(0, "Incorrect answer.")
 
+class ScoreAbortingEnvironment(Environment):
+    def __init__(self, tools: Dict[str, Toolset], scoreboard_manager: ScoreboardManager, prompt: Dict[str, str], max_steps: int, gt_label: str):
+        output_tool = Output(gt_label)
+        super().__init__({ **tools, "output": output_tool }, scoreboard_manager, prompt, lambda x: scoreboard_manager.get_current_score() <= -1000, max_steps)
+
 def build_one_task(prompt: str, text: str, label: str, tokenizer):
     token_length = tokenizer([text], return_tensors="pt").input_ids.shape[1]
     output = Output(label)
@@ -77,7 +90,7 @@ def build_one_task(prompt: str, text: str, label: str, tokenizer):
 
 def build_tasks(num: int, TOKENIZER):
     data = DATASET[:num]
-    tasks = [build_one_task(prompt, text, label, TOKENIZER) for prompt, text, label in data]
+    tasks = [build_one_task(item["prompt"], item["text"], item["label"], TOKENIZER) for item in data]
     return tasks
 
 def long_thinking_penalty_hook(instance, model_output: str, context: Optional[str], tool: Optional[str], tool_input: Optional[str]) -> Optional[str]:

@@ -276,6 +276,8 @@ class RWKVSelfSFT(SelfSFT[RWKV]):
         try:
             tool_call_json = json.loads(extracted[0])
             assert tool_call_json["name"] == "tool", "Invalid tool call JSON. Expected tool call name to be 'tool'."
+            assert isinstance(tool_call_json["parameters"]["context"], str)
+            assert isinstance(tool_call_json["parameters"]["tool"], str)
             return tool_call_json["parameters"]["context"], tool_call_json["parameters"]["tool"], tool_call_json["parameters"].get("args", {})
         except Exception as e:
             raise InvalidToolCallJSONException()

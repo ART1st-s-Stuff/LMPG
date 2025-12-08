@@ -101,6 +101,8 @@ def parse_llm_output(output: str) -> Tuple[Optional[str], Optional[str], Optiona
     tool_call = match[0]
     try:
         tool_call_json = json.loads(tool_call)
+        assert isinstance(tool_call_json["context"], str)
+        assert isinstance(tool_call_json["tool"], str)
         return tool_call_json["context"], tool_call_json["tool"], tool_call_json.get("args", {})
     except Exception as e:
         print(e)

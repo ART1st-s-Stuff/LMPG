@@ -237,6 +237,7 @@ class HFMixin(StateManagerMixin):
     @dataclass
     class Config:
         GENERATION_CONFIG: GenerationConfig = GenerationConfig()
+        MAX_NEW_TOKENS: int = 768
         CHAT_TEMPLATE_ARGS: Dict[str, Any] = field(default_factory=dict)
 
     def __init__(self, model: GenerationMixin, tokenizer: AutoTokenizer, hf_config: Config, **kwargs):
@@ -251,8 +252,8 @@ class HFMixin(StateManagerMixin):
     def _debug_output(title: str, content: Any):
         logging.debug(f"=================[{title}]====================")
         s = content if isinstance(content, str) else str(content)
-        if len(s) > 200:
-            logging.debug(s[:200] + "...")
+        if len(s) > 2400:
+            logging.debug(s[:2400] + "...")
             logging.debug(f"Total output length: {len(s)}")
         else:
             logging.debug(s)
@@ -265,7 +266,7 @@ class HFMixin(StateManagerMixin):
                 user += "Environment: \n" + input["environment"] + "\n\n"
             if "reward" in input:
                 user += input["reward"] + "\n\n"
-            user += "Now begin your thinking process. First think what to do next, then optionally call one tool using <tool></tool>."
+            user += "Now begin your thinking process. Output schema:\n<think>Your thinking process...</think>\n\nOr:\n<think>Your thinking process...</think><tool>{\"context\" : ..., \"tool\" : ..., \"args\" : ...}</tool>"
             chat.append({"role": "user", "content": user})
         else:
             chat = [{"role": "user", "content": input}]
@@ -300,13 +301,13 @@ class HFMixin(StateManagerMixin):
             full_input.to(self.model.device),
             attention_mask=torch.ones_like(full_input).to(self.model.device),
             generation_config=self.hf_config.GENERATION_CONFIG,
-            max_new_tokens=4096,
+            max_new_tokens=self.hf_config.MAX_NEW_TOKENS,
             pad_token_id=self.tokenizer.eos_token_id
         )
         self.history_state = output_tokens[0]
         output = output_tokens[0][full_input.shape[1]:]
         output_str = self.detokenize(output)
-        self._debug_output("INPUT", output_str)
+        self._debug_output("OUTPUT", output_str)
         return output_str
 
 T = TypeVar('T', bound=Any)

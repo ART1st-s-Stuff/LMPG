@@ -11,6 +11,8 @@ from peft import LoraConfig, get_peft_model
 from trl import GRPOConfig, GRPOTrainer
 import os
 
+from models.arwkv import ARWKVHFAgent
+
 from utils.agent import SFTHFAgent
 from environment.internal_tools.self_sft import SelfSFT_TRL
 from tasks.tool.tool_training import build_one_task
@@ -51,9 +53,9 @@ PEFT_MODEL = get_peft_model(MODEL, LORA_CONFIG)
 if __name__ == "__main__":
     tasks = [build_one_task() for _ in range(100)]
     for task in tasks:
-        agent = SFTHFAgent(task, MODEL, TOKENIZER,
+        agent = ARWKVHFAgent(task, MODEL, TOKENIZER,
             SelfSFT_TRL(PEFT_MODEL, TOKENIZER, peft_config=LORA_CONFIG),
-            SFTHFAgent.Config(
+            ARWKVHFAgent.Config(
                 TELL_REWARD_AFTER_EACH_ROUND=True,
                 AUTO_SFT=False,
                 AUTO_SFT_CONFIG={
