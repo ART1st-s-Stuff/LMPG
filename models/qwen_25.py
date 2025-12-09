@@ -105,6 +105,7 @@ def parse_llm_output(output: str) -> Tuple[Optional[str], Optional[str], Optiona
             assert tool_call_json["name"] == "tool"
             assert isinstance(tool_call_json["arguments"]["context"], str)
             assert isinstance(tool_call_json["arguments"]["tool"], str)
+            assert isinstance(tool_call_json["arguments"].get("args", {}), dict)
             return tool_call_json["arguments"]["context"], tool_call_json["arguments"]["tool"], tool_call_json["arguments"].get("args", {})
     except Exception as e:
         print(e)

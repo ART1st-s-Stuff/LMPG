@@ -1,0 +1,4 @@
+Adding interface memorize
+Adding interface output
+Unterminated string starting at: line 1 column 15 (char 14)
+Expecting value: line 1 column 1 (char 0)

@@ -199,6 +199,9 @@ class Agent(StateManagerMixin):
             elif context in self.default_windows:
                 ctx = self.default_windows[context]
                 tool_output = ctx.invoke(tool, tool_input)
+            elif f"text-default-{context}" in self.default_windows:
+                ctx = self.default_windows[f"text-default-{context}"]
+                tool_output = ctx.invoke(tool, tool_input)
             # Not internal tools. Try context tools.
             elif context in self.toolsets:
                 ctx = self.toolsets[context]

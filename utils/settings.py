@@ -6,7 +6,7 @@ MODEL_DIR = os.path.join(WORK_DIR, 'model')
 
 #MODEL = AutoModelForCausalLM.from_pretrained('fla-hub/rwkv7-1.5B-g1', trust_remote_code=True).cuda()
 #TOKENIZER = AutoTokenizer.from_pretrained('fla-hub/rwkv7-1.5B-g1', trust_remote_code=True)
-TOKENIZER = AutoTokenizer.from_pretrained("./models/arwkv", trust_remote_code=True)
+TOKENIZER = AutoTokenizer.from_pretrained("RWKV-Red-Team/ARWKV-7B-Preview-0.1", trust_remote_code=True)
 #MODEL = AutoModelForCausalLM.from_pretrained(MODEL_DIR, trust_remote_code=True).cuda()
 GENERATION_CONFIG = {
     "do_sample": True,
