@@ -12,6 +12,7 @@ from .scoring import ScoreboardManager
 from .tool import Toolset, parse_llm_output
 from .exceptions import ToolCallException, ContextNotExistException
 from .text import TextWindow, text_window, SegmentTextWindow, FileTextWindow
+from .context import SlidingWindowContextManager
 from . import settings
 
 logging.basicConfig(level=logging.DEBUG)
@@ -233,8 +234,8 @@ class Agent(StateManagerMixin):
 class HFMixin(StateManagerMixin):
     model: GenerationMixin
     tokenizer: AutoTokenizer
-    history_state: Optional[torch.Tensor]
-    history_chat: List[Dict[str, str]]
+    #history_state: Optional[torch.Tensor]
+    history_chat: SlidingWindowContextManager
     hf_config: 'Config'
 
     @dataclass
@@ -243,10 +244,10 @@ class HFMixin(StateManagerMixin):
         MAX_NEW_TOKENS: int = 768
         CHAT_TEMPLATE_ARGS: Dict[str, Any] = field(default_factory=dict)
 
-    def __init__(self, model: GenerationMixin, tokenizer: AutoTokenizer, hf_config: Config, **kwargs):
+    def __init__(self, model: GenerationMixin, tokenizer: AutoTokenizer, hf_config: Config, *, initial_prompt: str = '', max_context_length: int = 64000, **kwargs):
         self.tokenizer = tokenizer
-        self.history_state = None
-        self.history_chat = []
+        #self.history_state = None
+        self.history_chat = SlidingWindowContextManager(initial_prompt={'role': 'system', 'content': initial_prompt}, max_context_length=max_context_length)
         self.model = model
         self.hf_config = hf_config
         super().__init__(**kwargs)
@@ -289,26 +290,22 @@ class HFMixin(StateManagerMixin):
         return self.tokenizer.batch_decode([output], skip_special_tokens=True)[0]
 
     def clear_state(self):
-        self.history_state = None
+        self.history_chat.clear()
 
     def _forward(self, input: str | Dict[str, str]) -> str:
-        chat, tokenized_input = self.tokenize(input)
+        self.history_chat.add(input)
+        chat, tokenized_input = self.tokenize(self.history_chat)
         self._debug_output("INPUT", chat)
-        self.history_chat += chat
-        if self.history_state is not None:
-            full_input = torch.cat([self.history_state, tokenized_input.to(self.history_state.device)], dim=0)
-        else:
-            full_input = tokenized_input
-        full_input = full_input.unsqueeze(0)
+        #full_input = full_input.unsqueeze(0)
         output_tokens = self.model.generate(
-            full_input.to(self.model.device),
-            attention_mask=torch.ones_like(full_input).to(self.model.device),
+            tokenized_input.to(self.model.device),
+            attention_mask=torch.ones_like(tokenized_input).to(self.model.device),
             generation_config=self.hf_config.GENERATION_CONFIG,
             max_new_tokens=self.hf_config.MAX_NEW_TOKENS,
             pad_token_id=self.tokenizer.eos_token_id
         )
-        self.history_state = output_tokens[0]
-        output = output_tokens[0][full_input.shape[1]:]
+        #self.history_state = output_tokens[0]
+        output = output_tokens[0][tokenized_input.shape[1]:]
         output_str = self.detokenize(output)
         self._debug_output("OUTPUT", output_str)
         return output_str
