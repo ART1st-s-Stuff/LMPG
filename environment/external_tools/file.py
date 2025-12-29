@@ -40,7 +40,7 @@ class FileIO(Toolset):
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
-            return text_window(content, filename, 'file')
+            return text_window(content, filename, 'file', 'file')
         except Exception as e:
             return f"Failed to open file {filename} due to {e}"
 
@@ -99,4 +99,4 @@ class FileIO(Toolset):
         Args:
             dir, str: The directory to list files from.
         """
-        return text_window(os.listdir(os.path.join(self.working_dir, dir)), 'files', 'file')
+        return text_window(os.listdir(os.path.join(self.working_dir, dir)), 'list', 'file', 'file')
