@@ -48,7 +48,7 @@ class OutputLengthPenaltyMixin(ABC):
         self.add_pre_tool_call_hook(self._output_length_penalty_hook)
 
     @staticmethod
-    def _output_length_penalty_hook(instance: 'OutputLengthPenaltyMixin', model_output: str, context: Optional[str], tool: Optional[str], tool_input: Optional[str]) -> int:
+    def _output_length_penalty_hook(instance: 'OutputLengthPenaltyMixin', model_output: str, tool_set: Optional[str], tool: Optional[str], tool_input: Optional[str]) -> int:
         context_length = instance._calculate_output_length(model_output)
         if instance.max_output_length > 0 and context_length > instance.max_output_length:
             instance.scoreboard_manager.get_scoreboard().reward(instance.output_length_penalty, f"Output length exceeds the maximum length of {instance.max_output_length}.")
@@ -67,6 +67,7 @@ class Agent(StateManagerMixin):
     config: 'Config'
     pre_tool_call_hooks : List[Callable[['Agent', str, Optional[str], Optional[str], Optional[str]], Optional[str]]]
     post_tool_call_hooks : List[Callable[['Agent', str, str, str, str], Optional[str]]]
+    finished: bool = False
 
     @dataclass
     class Config:
@@ -133,7 +134,7 @@ class Agent(StateManagerMixin):
     def add_post_tool_call_hook(self, hook: Callable[['Agent', str, str, str, str], Optional[str]]):
         self.post_tool_call_hooks.append(hook)
 
-    def _pre_tool_call_hook(self, model_output: str, context: Optional[str], tool: Optional[str], tool_input: Optional[str]) -> Optional[str|Tuple[str, str, str]]:
+    def _pre_tool_call_hook(self, model_output: str, tool_set: Optional[str], tool: Optional[str], tool_input: Optional[str]) -> Optional[str|Tuple[str, str, str]]:
         """Hook for tool calling.
         
         If a string is returned, it will be used as the tool call output and
@@ -142,16 +143,16 @@ class Agent(StateManagerMixin):
         If a tuple is returned, it will be used as the new context-tool-tool_input tuple.
         """
         for hook in self.pre_tool_call_hooks:
-            result = hook(self, model_output=model_output, context=context, tool=tool, tool_input=tool_input)
+            result = hook(self, model_output=model_output, tool_set=tool_set, tool=tool, tool_input=tool_input)
             if result is not None:
                 return result
         return None
 
-    def _post_tool_call_hook(self, context: str, tool: str, tool_input: str, tool_output: str) -> Optional[str]:
+    def _post_tool_call_hook(self, tool_set: str, tool: str, tool_input: str, tool_output: str) -> Optional[str]:
         """Hook for post-tool calling. If a string is returned, it will be used
         directly as the tool call output."""
         for hook in self.post_tool_call_hooks:
-            result = hook(self, context=context, tool=tool, tool_input=tool_input, tool_output=tool_output)
+            result = hook(self, tool_set=tool_set, tool=tool, tool_input=tool_input, tool_output=tool_output)
             if result is not None:
                 return result
         return tool_output
@@ -176,37 +177,37 @@ class Agent(StateManagerMixin):
     def _call_tool(self, output: str) -> Optional[str]:
         # Parse output
         try:
-            context, tool, tool_input = self._parse_llm_output(output)
+            tool_set, tool_name, tool_input = self._parse_llm_output(output)
             # First execute hook.
-            hook_output = self._pre_tool_call_hook(output, context, tool, tool_input)
+            hook_output = self._pre_tool_call_hook(output, tool_set, tool_name, tool_input)
             if isinstance(hook_output, str):
                 return hook_output
             elif isinstance(hook_output, tuple):
-                context, tool, tool_input = hook_output
-                context = context.lower()
-                tool = tool.lower()
-            if context is None:
+                tool_set, tool_name, tool_input = hook_output
+                tool_set = tool_set.lower()
+                tool_name = tool_name.lower()
+            if tool_set is None:
                 # No tool call in this round. Skip.
                 return None
             # Handle window operations
-            elif context in self.open_windows:
-                ctx = self.open_windows[context]
+            elif tool_set in self.open_windows:
+                selected_tool_set = self.open_windows[tool_set]
                 # Only open_windows can be closed
-                if tool == "close":
-                    del self.open_windows[context]
-                    tool_output = f"Closed window {context}."
+                if tool_name == "close":
+                    del self.open_windows[tool_set]
+                    tool_output = f"Closed window {tool_set}."
                 else:
-                    tool_output = ctx.invoke(tool, tool_input)
-            elif context in self.default_windows:
-                ctx = self.default_windows[context]
-                tool_output = ctx.invoke(tool, tool_input)
-            elif f"text-default-{context}" in self.default_windows:
-                ctx = self.default_windows[f"text-default-{context}"]
-                tool_output = ctx.invoke(tool, tool_input)
+                    tool_output = selected_tool_set.invoke(tool_name, tool_input)
+            elif tool_set in self.default_windows:
+                selected_tool_set = self.default_windows[tool_set]
+                tool_output = selected_tool_set.invoke(tool_name, tool_input)
+            elif f"text-default-{tool_set}" in self.default_windows:
+                selected_tool_set = self.default_windows[f"text-default-{tool_set}"]
+                tool_output = selected_tool_set.invoke(tool_name, tool_input)
             # Not internal tools. Try context tools.
-            elif context in self.toolsets:
-                ctx = self.toolsets[context]
-                tool_output = ctx.invoke(tool, tool_input, context=context, scoreboard_manager=self.scoreboard_manager)
+            elif tool_set in self.toolsets:
+                selected_tool_set = self.toolsets[tool_set]
+                tool_output = selected_tool_set.invoke(tool_name, tool_input, tool_set=tool_set, scoreboard_manager=self.scoreboard_manager)
                 # If the output is a text window
                 if isinstance(tool_output, TextWindow):
                     if not tool_output.volatile:
@@ -215,10 +216,12 @@ class Agent(StateManagerMixin):
                         # TODO: Handle volatile windows.
                         ...
                     tool_output = tool_output.read()
+                if selected_tool_set.finish_flag:
+                    self.finished = True
             else:
-                raise ContextNotExistException(context)
+                raise ContextNotExistException(tool_set)
             self._update_window_list()
-            tool_output = self._post_tool_call_hook(context, tool, tool_input, tool_output)
+            tool_output = self._post_tool_call_hook(tool_set, tool_name, tool_input, tool_output)
             return tool_output
         except ToolCallException as e:
             self.scoreboard_manager.get_scoreboard(Agent).reward(e.penalty, str(e))
@@ -270,7 +273,7 @@ class HFMixin(StateManagerMixin):
                 user += "Environment: \n" + input["environment"] + "\n\n"
             if "reward" in input:
                 user += input["reward"] + "\n\n"
-            user += "Now begin your thinking process. Output schema:\n<think>Your thinking process...</think>\n\nOr:\n<think>Your thinking process...</think><tool>{\"context\" : ..., \"tool\" : ..., \"args\" : ...}</tool>"
+            user += "Now begin your thinking process. Output schema:\n<think>Your thinking process...</think>\n\nOr:\n<think>Your thinking process...</think><tool>{\"tool_set\" : ..., \"tool_name\" : ..., \"args\" : ...}</tool>"
             chat.append({"role": "user", "content": user})
         else:
             chat = [{"role": "user", "content": input}]
@@ -342,7 +345,7 @@ class SFTAgent(Agent, Generic[T]):
         self.step_perplexity = None
 
     @staticmethod
-    def _self_sft(instance: 'SFTAgent', context: str, tool: str, tool_input: str, tool_output: str):
+    def _self_sft(instance: 'SFTAgent', tool_set: str, tool: str, tool_input: str, tool_output: str):
         if instance.sft_trainer.changed:
             instance.update_model(instance.sft_trainer.get_model())
             instance.sft_trainer.reset_changed()

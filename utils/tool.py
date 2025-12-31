@@ -37,6 +37,8 @@ class ToolsetInterfaceIterator:
         return name, func.__tool_desc__, func
 
 class Toolset(metaclass=__ToolsetMeta):
+    finish_flag: bool = False
+
     def __init__(self):
         self.__interface__ = dict(self.__class__.__cls_interface__)
 
@@ -44,12 +46,12 @@ class Toolset(metaclass=__ToolsetMeta):
     def interface(self):
         return ToolsetInterfaceIterator(self.__interface__)
 
-    def invoke(self, tool_name: str, tool_input: Any, context: str, scoreboard_manager: ScoreboardManager) -> str:
+    def invoke(self, tool_name: str, tool_input: Any, tool_set: str, scoreboard_manager: ScoreboardManager) -> str:
         key = tool_name.lower()
         if key not in self.__interface__:
-            raise ToolNotExistException(context, tool_name)
+            raise ToolNotExistException(tool_set, tool_name)
         func = self.__interface__[key]
-        return func(self, tool_input, _context=context, _scoreboard_manager=scoreboard_manager)
+        return func(self, tool_input, _tool_set=tool_set, _scoreboard_manager=scoreboard_manager)
 
     @staticmethod
     def tool(tool_name: Optional[str] = None, description: Optional[str] = None) -> Callable[[ToolFunction], ToolFunction]:
@@ -72,7 +74,7 @@ class Toolset(metaclass=__ToolsetMeta):
             desc = description or func.__doc__ or ""
             desc += f"\nThe input arguments should be in {format} format."
             @wraps(func)
-            def inner(self, tool_input: Any, _context: str, _scoreboard_manager: ScoreboardManager) -> str:
+            def inner(self, tool_input: Any, _tool_set: str, _scoreboard_manager: ScoreboardManager) -> str:
                 match format:
                     case "json":
                         _kwargs = tool_input
@@ -84,12 +86,15 @@ class Toolset(metaclass=__ToolsetMeta):
                         _kwargs = toml.load(tool_input)
                     case _:
                         raise ValueError(f"Invalid type: {format}")
-                _kwargs["_context"] = _context
+                _kwargs["_tool_set"] = _tool_set
                 _kwargs["_scoreboard_manager"] = _scoreboard_manager
                 tool_args_guard(func, tool_input)
                 return func(self, **_kwargs)
             return Toolset.tool(description=desc, tool_name=tool_name, **kwargs)(inner)
         return wrapper
+
+    def finish(self):
+        self.finish_flag = True
 
 def parse_llm_output(output: str) -> Tuple[Optional[str], Optional[str], Optional[str | Dict[str, Any]]]:
     regex = re.compile(r'<tool>(.*?)</tool>', re.DOTALL)
@@ -101,10 +106,10 @@ def parse_llm_output(output: str) -> Tuple[Optional[str], Optional[str], Optiona
     tool_call = match[0]
     try:
         tool_call_json = json.loads(tool_call)
-        assert isinstance(tool_call_json["context"], str)
-        assert isinstance(tool_call_json["tool"], str)
+        assert isinstance(tool_call_json["tool_set"], str)
+        assert isinstance(tool_call_json["tool_name"], str)
         assert isinstance(tool_call_json.get("args", {}), dict)
-        return tool_call_json["context"], tool_call_json["tool"], tool_call_json.get("args", {})
+        return tool_call_json["tool_set"], tool_call_json["tool_name"], tool_call_json.get("args", {})
     except Exception as e:
         print(e)
         raise InvalidToolCallJSONException()
