@@ -5,16 +5,16 @@ import subprocess
 import uuid
 from typing import Dict, Any
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 @dataclass
 class DockerEnvironmentConfig:
     image: str
     cwd: str = "/"
     """Working directory in which to execute commands."""
-    env: dict[str, str] = {}
+    env: dict[str, str] = field(default_factory=lambda: {})
     """Environment variables to set in the container."""
-    forward_env: list[str] = []
+    forward_env: list[str] = field(default_factory=lambda: [])
     """Environment variables to forward to the container.
     Variables are only forwarded if they are set in the host environment.
     In case of conflict with `env`, the `env` variables take precedence.
@@ -23,7 +23,7 @@ class DockerEnvironmentConfig:
     """Timeout for executing commands in the container."""
     executable: str = os.getenv("MSWEA_DOCKER_EXECUTABLE", "docker")
     """Path to the docker/container executable."""
-    run_args: list[str] = ["--rm"]
+    run_args: list[str] = field(default_factory=lambda: ["--rm"])
     """Additional arguments to pass to the docker/container executable.
     Default is ["--rm"], which removes the container after it exits.
     """
