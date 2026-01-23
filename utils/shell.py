@@ -4,6 +4,7 @@ import shlex
 import subprocess
 import uuid
 from typing import Dict, Any
+from abc import ABC, abstractmethod
 
 from dataclasses import dataclass, field
 
@@ -151,5 +152,6 @@ class LocalShellEnvironment:
             errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            check=False,
         )
         return {"output": result.stdout, "returncode": result.returncode}
