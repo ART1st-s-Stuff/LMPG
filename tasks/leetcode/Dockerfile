@@ -8,6 +8,7 @@ RUN cd /tmp && \
     mv leetgo/leetgo /usr/local/bin/leetgo && \
     chmod +x /usr/local/bin/leetgo
 RUN mkdir /workspace && cd /workspace && leetgo init -t us -l cpp
+RUN sed -i 's/- browser/- cookies/g' /workspace/leetgo.yaml
 
-WORKDIR /workspace/cpp
+WORKDIR /workspace
 CMD ["bash"]

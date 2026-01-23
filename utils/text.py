@@ -39,9 +39,9 @@ class TextWindow(ABC):
     def _window_name(self) -> str:
         return f"{self.interface_prefix}-{self.window_id}"
 
-    @property
+    @classmethod
     @abstractmethod
-    def hint(self) -> str:
+    def hint(cls) -> str:
         ...
     
     # def embed_roles(self, tokens: torch.Tensor) -> torch.Tensor:
@@ -74,6 +74,8 @@ class SegmentTextWindow(TextWindow):
         }
     
     def read(self) -> str:
+        if self.current_segment >= len(self.segments):
+            return f"<[{self.window_name}]>Max segment number: {len(self.segments) - 1}<[/{self.window_name}]>"
         ret = self.segments[self.current_segment]
         return ret
 
@@ -81,8 +83,8 @@ class SegmentTextWindow(TextWindow):
         self.current_segment = segment_number
         return self.read()
 
-    @property
-    def hint(self) -> str:
+    @classmethod
+    def hint(cls) -> str:
         return dedent(
             """
             Text segment window: The long text is split into segments.
@@ -127,13 +129,13 @@ class FileTextWindow(TextWindow):
 
     @property
     def window_name(self) -> str:
-        return f"FILE-{self._window_name}"
+        return f"file-{self._window_name}"
 
-    @property
-    def hint(self) -> str:
+    @classmethod
+    def hint(cls) -> str:
         return dedent(
             f"""
-            File window: View a file. A window contains {self.LINES_IN_A_WINDOW} lines.
+            File window: View a file. A window contains {cls.LINES_IN_A_WINDOW} lines.
 
             read: Read the current window.
             go_to_line: Go to a specific line and read. Args: line_number, int: The number of the line to go to.

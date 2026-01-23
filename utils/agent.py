@@ -1,19 +1,21 @@
 from typing import Dict, List, Tuple, Callable, Optional, Any, TypeVar, Generic, TypedDict
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import logging
-import torch
-from transformers.generation import GenerationMixin, GenerationConfig
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from abc import ABC, abstractmethod
 
 from environment.internal_tools.self_sft import SelfSFT, SelectedSFTConfig
+from debug.trace import TraceManager
 from .environment import Environment
 from .scoring import ScoreboardManager
 from .tool import Toolset, parse_llm_output
-from .exceptions import ToolCallException, ContextNotExistException
+from .exceptions import ToolCallException, ToolsetNotExistException, InvalidToolArgsException
 from .text import TextWindow, text_window, SegmentTextWindow, FileTextWindow
-from .context import SlidingWindowContextManager
+from .context import SlidingWindowContextManager, DefaultContextType
 from . import settings
+
+import torch
+from transformers.generation import GenerationMixin, GenerationConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -73,7 +75,8 @@ class Agent(StateManagerMixin):
     class Config:
         TELL_REWARD_AFTER_EACH_ROUND: bool = field(default=False)
 
-    def __init__(self, environment: Environment, config: Config):
+    def __init__(self, environment: Environment, config: Config, **kwargs):
+        super().__init__(**kwargs)
         self.config = config
         self.pre_tool_call_hooks = []
         self.post_tool_call_hooks = []
@@ -84,21 +87,24 @@ class Agent(StateManagerMixin):
         self.default_windows = {}
         self.environment = environment
         self.scoreboard_manager = environment.scoreboard_manager
-        self.toolsets = environment.tools
+        self.toolsets = {
+            **environment.tools,
+            **self.internal_tools,
+        }
         
         # Set default windows: Prompt, tools, scoreboard, opened windows list
         for key, value in environment.prompt.items():
             window = text_window(
                 value,
                 window_id=key,
-                interface_prefix="default",
+                interface_prefix="internal",
                 window_type="segment"
             )
             self.default_windows[window.window_name] = window
         tools_window = text_window(
             self.environment.tools_hint,
             window_id="tools",
-            interface_prefix="default",
+            interface_prefix="internal",
             window_type="segment"
         )
         self.default_windows[tools_window.window_name] = tools_window
@@ -112,14 +118,14 @@ class Agent(StateManagerMixin):
     def _update_window_list(self):
         _default_windows = '\n'.join(self.default_windows.keys())
         _opened_windows = '\n'.join(self.open_windows.keys())
-        self.default_windows["window_list"] = text_window(
-            [
-                f"Window operation hints: {SegmentTextWindow.hint}\n{FileTextWindow.hint}",
-                f"Default windows:\n{_default_windows}",
-                f"Opened windows:\n{_opened_windows}"
-            ],
+        self.default_windows["text-internal-window_list"] = text_window(
+            "\n\n".join([
+                f"Window operation hints: {SegmentTextWindow.hint()}\n{FileTextWindow.hint()}",
+                f"{len(self.default_windows)} Default windows:\n{_default_windows}",
+                f"{len(self.open_windows)} Opened windows:\n{_opened_windows}"
+            ]),
             window_id="window_list",
-            interface_prefix="default",
+            interface_prefix="internal",
             window_type="segment"
         )
 
@@ -190,19 +196,26 @@ class Agent(StateManagerMixin):
                 # No tool call in this round. Skip.
                 return None
             # Handle window operations
-            elif tool_set in self.open_windows:
-                selected_tool_set = self.open_windows[tool_set]
+            elif tool_set == "window":
+                if "window_name" not in tool_input:
+                    raise InvalidToolArgsException("`window_name` in `args` is required.")
+                window_name = tool_input["window_name"]
+                # Remove from tool_input to avoid unexpected args.
+                del tool_input["window_name"]
+                selected_window = self.open_windows.get(window_name) or self.default_windows.get(window_name)
+                if selected_window is None:
+                    raise ToolCallException(f"Window `{window_name}` does not exist.")
                 # Only open_windows can be closed
                 if tool_name == "close":
-                    del self.open_windows[tool_set]
-                    tool_output = f"Closed window {tool_set}."
+                    if window_name in self.open_windows:
+                        del self.open_windows[window_name]
+                        tool_output = f"Closed window {tool_set}."
+                    else:
+                        raise ToolCallException(f"You cannot close an internal window {window_name}.")
                 else:
-                    tool_output = selected_tool_set.invoke(tool_name, tool_input)
+                    tool_output = selected_window.invoke(tool_name, tool_input)
             elif tool_set in self.default_windows:
                 selected_tool_set = self.default_windows[tool_set]
-                tool_output = selected_tool_set.invoke(tool_name, tool_input)
-            elif f"text-default-{tool_set}" in self.default_windows:
-                selected_tool_set = self.default_windows[f"text-default-{tool_set}"]
                 tool_output = selected_tool_set.invoke(tool_name, tool_input)
             # Not internal tools. Try context tools.
             elif tool_set in self.toolsets:
@@ -219,7 +232,7 @@ class Agent(StateManagerMixin):
                 if selected_tool_set.finish_flag:
                     self.finished = True
             else:
-                raise ContextNotExistException(tool_set)
+                raise ToolsetNotExistException(tool_set)
             self._update_window_list()
             tool_output = self._post_tool_call_hook(tool_set, tool_name, tool_input, tool_output)
             return tool_output
@@ -234,6 +247,10 @@ class Agent(StateManagerMixin):
     #     self.pause()
     #     self.forward(input)
 
+    @property
+    def internal_tools(self) -> Dict[str, Toolset]:
+        return {}
+
 class HFMixin(StateManagerMixin):
     model: GenerationMixin
     tokenizer: AutoTokenizer
@@ -243,44 +260,25 @@ class HFMixin(StateManagerMixin):
 
     @dataclass
     class Config:
-        GENERATION_CONFIG: GenerationConfig = GenerationConfig()
-        MAX_NEW_TOKENS: int = 768
+        GENERATION_CONFIG: GenerationConfig = GenerationConfig(do_sample=True)
+        MAX_NEW_TOKENS: int = 4096
         CHAT_TEMPLATE_ARGS: Dict[str, Any] = field(default_factory=dict)
 
-    def __init__(self, model: GenerationMixin, tokenizer: AutoTokenizer, hf_config: Config, *, initial_prompt: str = '', max_context_length: int = 64000, **kwargs):
+    def __init__(self, model: GenerationMixin, tokenizer: AutoTokenizer, hf_config: Config, *, topic: str = '', max_context_length: int = 64000, **kwargs):
+        super().__init__(**kwargs)
         self.tokenizer = tokenizer
         #self.history_state = None
-        self.history_chat = SlidingWindowContextManager(initial_prompt={'role': 'system', 'content': initial_prompt}, max_context_length=max_context_length)
+        self.history_chat = SlidingWindowContextManager(topic={'role': 'system', 'content': topic}, max_context_length=max_context_length)
         self.model = model
         self.hf_config = hf_config
-        super().__init__(**kwargs)
 
-    @staticmethod
-    def _debug_output(title: str, content: Any):
-        logging.debug(f"=================[{title}]====================")
-        s = content if isinstance(content, str) else str(content)
-        if len(s) > 2400:
-            logging.debug(s[:2400] + "...")
-            logging.debug(f"Total output length: {len(s)}")
-        else:
-            logging.debug(s)
+        self.trace_manager = TraceManager()
+        self.trace = self.trace_manager.new_trace()
 
-    def _to_chat_format(self, input: str | Dict[str, str]) -> str:
-        if isinstance(input, dict):
-            chat = [{"role": "assistant", "content": input["ai"]}]
-            user = ""
-            if "environment" in input:
-                user += "Environment: \n" + input["environment"] + "\n\n"
-            if "reward" in input:
-                user += input["reward"] + "\n\n"
-            user += "Now begin your thinking process. Output schema:\n<think>Your thinking process...</think>\n\nOr:\n<think>Your thinking process...</think><tool>{\"tool_set\" : ..., \"tool_name\" : ..., \"args\" : ...}</tool>"
-            chat.append({"role": "user", "content": user})
-        else:
-            chat = [{"role": "user", "content": input}]
-        return chat
+    def _debug_output(self, content: Any):
+        self.trace.add(content)
 
-    def tokenize(self, input: str | Dict[str, str]) -> torch.Tensor:
-        input = self._to_chat_format(input)
+    def tokenize(self, input: DefaultContextType) -> torch.Tensor:
         text = self.tokenizer.apply_chat_template(
             input,
             tokenize=False,
@@ -296,9 +294,23 @@ class HFMixin(StateManagerMixin):
         self.history_chat.clear()
 
     def _forward(self, input: str | Dict[str, str]) -> str:
-        self.history_chat.add(input)
+        if isinstance(input, str):
+            self.history_chat.add({
+                "role": "user",
+                "content": input
+            })
+        else:
+            user = ""
+            if "environment" in input:
+                user += "Environment: \n" + str(input["environment"]) + "\n\n"
+            if "reward" in input:
+                user += input["reward"] + "\n\n"
+            user += "Now begin your thinking process. Output schema:\n<think>Your thinking process...</think>\n\nOr:\n<think>Your thinking process...</think><tool>{\"tool_set\" : ..., \"tool_name\" : ..., \"args\" : ...}</tool>"
+            self.history_chat.append({"role": "user", "content": user})
+            # Assistant's output is already added
         chat, tokenized_input = self.tokenize(self.history_chat)
-        self._debug_output("INPUT", chat)
+        self._debug_output(self.history_chat[-1])
+        tokenized_input = tokenized_input.unsqueeze(0)
         #full_input = full_input.unsqueeze(0)
         output_tokens = self.model.generate(
             tokenized_input.to(self.model.device),
@@ -310,8 +322,18 @@ class HFMixin(StateManagerMixin):
         #self.history_state = output_tokens[0]
         output = output_tokens[0][tokenized_input.shape[1]:]
         output_str = self.detokenize(output)
-        self._debug_output("OUTPUT", output_str)
+        self.history_chat.add({
+            "role": "assistant",
+            "content": output_str
+        })
+        self._debug_output(self.history_chat[-1])
         return output_str
+
+    @property
+    def internal_tools(self) -> Dict[str, Toolset]:
+        return {
+            "set_topic": self.history_chat.topic_tool
+        }
 
 T = TypeVar('T', bound=Any)
 class SFTAgent(Agent, Generic[T]):
@@ -333,14 +355,13 @@ class SFTAgent(Agent, Generic[T]):
         AUTO_SFT_CONFIG: Optional[SelectedSFTConfig] = field(default=None, metadata={'description': 'Configuration for automatic SFT training.'})
         AUTO_SFT_PERPLEXITY_THRESHOLD: float = field(default=0.0, metadata={'description': 'Threshold to stop SFT training. Set to positive value to enable.'})
 
-    def __init__(self, environment: Environment, sft_trainer: SelfSFT, config: Config):
-        super().__init__(environment, config)
-
+    def __init__(self, environment: Environment, sft_trainer: SelfSFT, config: Config, **kwargs):
         if config.AUTO_SFT and config.AUTO_SFT_CONFIG is None:
             raise ValueError("AUTO_SFT_CONFIG is required when AUTO_SFT is enabled.")
 
         self.sft_trainer = sft_trainer
-        self.toolsets["self_sft"] = self.sft_trainer
+        super().__init__(environment=environment, config=config, **kwargs)
+        
         self.add_post_tool_call_hook(self._self_sft)
         self.step_perplexity = None
 
@@ -384,14 +405,27 @@ class SFTAgent(Agent, Generic[T]):
         step_output, step_perplexity = self._forward_and_calculate_perplexity(input)
         self.step_perplexity = step_perplexity
         return step_output
+    
+    @property
+    def internal_tools(self) -> Dict[str, Toolset]:
+        return {
+            "self_sft": self.sft_trainer
+        }
 
 class SFTHFAgent(HFMixin, SFTAgent[AutoModelForCausalLM]):
     @dataclass
     class Config(SFTAgent.Config, HFMixin.Config):
         pass
 
-    def __init__(self, environment: Environment, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, sft_trainer: SelfSFT, config: Config):
-        super().__init__(model=model, tokenizer=tokenizer, hf_config=config, environment=environment, sft_trainer=sft_trainer, config=config)
+    def __init__(self, environment: Environment, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, sft_trainer: SelfSFT, config: Config, **kwargs):
+        super().__init__(model=model, tokenizer=tokenizer, hf_config=config, environment=environment, sft_trainer=sft_trainer, config=config, **kwargs)
 
     def _forward(self, input: str | Dict[str, str]) -> str:
         return HFMixin._forward(self, input)
+    
+    @property
+    def internal_tools(self) -> Dict[str, Toolset]:
+        return {
+            **super(HFMixin, self).internal_tools,
+            **super(SFTAgent, self).internal_tools,
+        }

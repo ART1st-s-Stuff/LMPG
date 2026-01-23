@@ -7,3 +7,6 @@
 [submodule "models/rwkv/RWKV-PEFT"]
 	path = models/rwkv/RWKV-PEFT
 	url = https://github.com/Joluck/RWKV-PEFT.git
+[submodule "tasks/business"]
+	path = tasks/business
+	url = https://github.com/bwllaming/matrix-paper.git
