@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Literal
 import os
 import subprocess
+import shutil
 
 from utils.tool import Toolset
 from utils.shell import ShellEnvironment, DockerShellEnvironment, LocalShellEnvironment
@@ -86,9 +87,13 @@ class LeetcodeEnvironment(Environment):
             self.environment = DockerShellEnvironment(image="leetcode-sandbox", cwd="/workspace",
                 env=login_credentials)
         else:
+            if os.path.exists(cwd):
+                shutil.rmtree(cwd)
+            os.makedirs(cwd)
             self.environment = LocalShellEnvironment(cwd=cwd,
                 env=login_credentials)
-            self.environment.execute(f"rm -rf {cwd} && mkdir -p {cwd}")
+            self.environment.execute("leetgo init -t us -l cpp")
+            self.environment.execute("sed -i 's/- browser/- cookies/g' ./leetgo.yaml")
         self.api = LeetcodeAPI(self.environment)
         self.api.pick(qid)
         leetcode_tool = LeetcodeSubmitTool(submission_limit, self.api, qid)
