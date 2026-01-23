@@ -115,7 +115,7 @@ HINT_TRAIN = dedent(
     - Find the directory first.
     - Read the question, then set up a plan in `cpp/<directory>/plan.md`.
     - Follow the plan to implement the solution. You can modify the plan if needed.
-    - You can summarize anything that you learned which may help you handle similar tasks in the future, then memorize it using `memorize` tool.
+    - You can summarize anything that you learned which may help you handle similar tasks in the future, including experience on the task and using tools, then memorize it using `memorize` tool.
     - You can compile and test the solution using `execute` tool.
     - When you have finished the solution, submit it to the leetcode problem using `submit` tool.
     - Finish the task using `finish` tool when your solution is accepted.
