@@ -1,13 +1,13 @@
-from typing import Optional, Dict
+from typing import Optional, Dict, Literal
 import os
 import subprocess
 
 from utils.tool import Toolset
-from utils.docker import DockerEnvironment
+from utils.shell import ShellEnvironment, DockerShellEnvironment, LocalShellEnvironment
 from utils.environment import Environment
 from utils.exceptions import ToolCallException
 from utils.scoring import DefaultScoreboardManager, ScoreboardManager
-from environment.external_tools.shell import DockerShellTool
+from environment.external_tools.shell import ShellTool
 from environment.internal_tools.self_sft import SelfSFT
 
 LEETCODE_PROMPT = """
@@ -20,7 +20,7 @@ class LeetcodeAPIException(ToolCallException):
     def __init__(self, message: str):
         super().__init__(message, -50)
 class LeetcodeAPI:
-    def __init__(self, environment: DockerEnvironment):
+    def __init__(self, environment: ShellEnvironment):
         self.environment = environment
 
     def _run_cmd(self, cmd: str):
@@ -76,16 +76,25 @@ class LeetcodeSubmitTool(Toolset):
         self.finish()
 
 class LeetcodeEnvironment(Environment):
-    def __init__(self, prompt: str, qid: str, login_credentials: Dict[str, str], tools: Dict[str, Toolset], submission_limit: int = 10, max_steps: int = 100):
+    def __init__(self, prompt: str, qid: str, login_credentials: Dict[str, str], tools: Dict[str, Toolset], *,
+            submission_limit: int = 10,
+            max_steps: int = 100,
+            environ_type: Literal["docker", "local"] = "docker",
+            cwd: str = "./.leetcode"):
         self.submission_limit = submission_limit
-        self.environment = DockerEnvironment(image="leetcode-sandbox", cwd="/workspace",
-            env=login_credentials)
+        if environ_type == "docker":
+            self.environment = DockerShellEnvironment(image="leetcode-sandbox", cwd="/workspace",
+                env=login_credentials)
+        else:
+            self.environment = LocalShellEnvironment(cwd=cwd,
+                env=login_credentials)
+            self.environment.execute(f"rm -rf {cwd} && mkdir -p {cwd}")
         self.api = LeetcodeAPI(self.environment)
         self.api.pick(qid)
         leetcode_tool = LeetcodeSubmitTool(submission_limit, self.api, qid)
         super().__init__(tools={
                 "leetcode": leetcode_tool,
-                "shell-sandbox": DockerShellTool(self.environment),
+                "shell-sandbox": ShellTool(self.environment),
                 **tools,
             }, scoreboard_manager=DefaultScoreboardManager(), prompt={
                 "prompt": prompt,

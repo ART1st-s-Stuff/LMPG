@@ -7,6 +7,18 @@ from typing import Dict, Any
 
 from dataclasses import dataclass, field
 
+class ShellEnvironment(ABC):
+    @abstractmethod
+    def execute(self, command: str, cwd: str = "", timeout: int | None = None) -> Dict[str, Any]:
+        """Execute a command in the shell.
+
+        Args:
+            command, str: The command to execute.
+            cwd, str: The working directory to execute the command in. Set to "" for default working directory.
+            timeout, int: The timeout in seconds for the command to execute.
+        """
+        ...
+
 @dataclass
 class DockerEnvironmentConfig:
     image: str
@@ -33,7 +45,7 @@ class DockerEnvironmentConfig:
     """Timeout in seconds for pulling images."""
 
 
-class DockerEnvironment:
+class DockerShellEnvironment(ShellEnvironment):
     def __init__(
         self,
         *,
@@ -112,3 +124,32 @@ class DockerEnvironment:
     def __del__(self):
         """Cleanup container when object is destroyed."""
         self.cleanup()
+
+
+@dataclass
+class LocalEnvironmentConfig:
+    cwd: str = ""
+    env: dict[str, str] = field(default_factory=lambda: {})
+    timeout: int = 30
+
+class LocalShellEnvironment:
+    def __init__(self, *, config_class: type = LocalEnvironmentConfig, **kwargs):
+        """This class executes bash commands directly on the local machine."""
+        self.config = config_class(**kwargs)
+
+    def execute(self, command: str, cwd: str = "", *, timeout: int | None = None):
+        """Execute a command in the local environment and return the result as a dict."""
+        cwd = cwd or self.config.cwd or os.getcwd()
+        result = subprocess.run(
+            command,
+            shell=True,
+            text=True,
+            cwd=cwd,
+            env=os.environ | self.config.env,
+            timeout=timeout or self.config.timeout,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        return {"output": result.stdout, "returncode": result.returncode}

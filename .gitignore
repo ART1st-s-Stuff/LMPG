@@ -5,5 +5,4 @@ agent
 wandb
 trainer_output/
 *.env
-.cursur
-.trace
+.*
