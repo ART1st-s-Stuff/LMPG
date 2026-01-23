@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Traces - 列表</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .traces-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .trace-item {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        
+        .trace-item:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .trace-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .trace-id {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .trace-meta {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        
+        .trace-meta span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6c757d;
+        }
+        
+        .empty-state svg {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 LLM Traces</h1>
+            <p>查看和管理所有的 LLM 对话记录</p>
+        </div>
+        <div class="content">
+            <div id="traces-container">
+                {% if traces %}
+                <div class="traces-list" id="traces-list">
+                    {% for trace in traces %}
+                    <a href="/trace/{{ trace.id }}" class="trace-item" data-trace-id="{{ trace.id }}">
+                        <div class="trace-item-header">
+                            <div class="trace-id">{{ trace.id }}</div>
+                            <div class="badge">{{ trace.length }} 条消息</div>
+                        </div>
+                        <div class="trace-meta">
+                            <span data-timestamp="{{ trace.created_at }}">📅 {{ trace.created_at }}</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state" id="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <h2>暂无 Traces</h2>
+                    <p>还没有创建任何 trace 记录</p>
+                </div>
+                {% endif %}
+            </div>
+            <div id="update-indicator" style="text-align: center; margin-top: 20px; color: #6c757d; font-size: 0.9em; opacity: 0;">
+                <span id="last-update">最后更新: --</span>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 格式化时间戳
+        function formatTimestamp(timestamp) {
+            if (!timestamp) return '';
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('zh-CN');
+        }
+
+        // 更新页面上的时间戳显示
+        function updateTimestamps() {
+            document.querySelectorAll('[data-timestamp]').forEach(span => {
+                const timestamp = parseFloat(span.getAttribute('data-timestamp'));
+                if (timestamp) {
+                    span.textContent = '📅 ' + formatTimestamp(timestamp);
+                }
+            });
+        }
+
+        // 渲染 traces 列表
+        function renderTraces(traces) {
+            const container = document.getElementById('traces-container');
+            const listEl = document.getElementById('traces-list');
+            const emptyEl = document.getElementById('empty-state');
+
+            if (!traces || traces.length === 0) {
+                // 显示空状态
+                if (listEl) listEl.style.display = 'none';
+                if (!emptyEl) {
+                    container.innerHTML = `
+                        <div class="empty-state" id="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            <h2>暂无 Traces</h2>
+                            <p>还没有创建任何 trace 记录</p>
+                        </div>
+                    `;
+                } else {
+                    emptyEl.style.display = 'block';
+                }
+                return;
+            }
+
+            // 隐藏空状态，显示列表
+            if (emptyEl) emptyEl.style.display = 'none';
+            
+            // 创建或更新列表
+            let list = listEl;
+            if (!list) {
+                list = document.createElement('div');
+                list.className = 'traces-list';
+                list.id = 'traces-list';
+                container.innerHTML = '';
+                container.appendChild(list);
+            }
+
+            // 渲染 traces
+            list.innerHTML = traces.map(trace => `
+                <a href="/trace/${trace.id}" class="trace-item" data-trace-id="${trace.id}">
+                    <div class="trace-item-header">
+                        <div class="trace-id">${trace.id}</div>
+                        <div class="badge">${trace.length} 条消息</div>
+                    </div>
+                    <div class="trace-meta">
+                        <span data-timestamp="${trace.created_at}">📅 ${formatTimestamp(trace.created_at)}</span>
+                    </div>
+                </a>
+            `).join('');
+        }
+
+        // 获取 traces 数据
+        async function fetchTraces() {
+            try {
+                const response = await fetch('/api/traces?t=' + Date.now(), {
+                    cache: 'no-store',
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
+                });
+                if (!response.ok) {
+                    console.error('Failed to fetch traces:', response.status);
+                    return;
+                }
+                const traces = await response.json();
+                renderTraces(traces);
+                
+                // 更新最后更新时间
+                const lastUpdateEl = document.getElementById('last-update');
+                if (lastUpdateEl) {
+                    lastUpdateEl.textContent = '最后更新: ' + new Date().toLocaleTimeString('zh-CN');
+                    const indicator = document.getElementById('update-indicator');
+                    if (indicator) {
+                        indicator.style.opacity = '1';
+                        setTimeout(() => {
+                            indicator.style.opacity = '0';
+                        }, 2000);
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching traces:', error);
+            }
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 格式化初始时间戳
+            updateTimestamps();
+            
+            // 立即获取一次数据
+            fetchTraces();
+            
+            // 每 2 秒轮询一次
+            setInterval(fetchTraces, 2000);
+        });
+    </script>
+</body>
+</html>

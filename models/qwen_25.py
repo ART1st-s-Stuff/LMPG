@@ -8,7 +8,7 @@ from transformers.generation import GenerationMixin, GenerationConfig
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from utils.agent import HFMixin, SFTAgent, SFTHFAgent
-from utils.exceptions import ToolCallException, ContextNotExistException
+from utils.exceptions import ToolCallException, ToolsetNotExistException
 from utils.environment import Environment
 from environment.internal_tools.self_sft import SelfSFT, SelectedSFTConfig
 
