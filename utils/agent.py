@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import logging
 
 from environment.internal_tools.self_sft import SelfSFT, SelectedSFTConfig
-from debug.trace import TraceManager
+from debug.trace import trace_manager
 from .environment import Environment
 from .scoring import ScoreboardManager
 from .tool import Toolset, parse_llm_output
@@ -272,7 +272,7 @@ class HFMixin(StateManagerMixin):
         self.model = model
         self.hf_config = hf_config
 
-        self.trace_manager = TraceManager()
+        self.trace_manager = trace_manager
         self.trace = self.trace_manager.new_trace()
 
     def _debug_output(self, content: Any):
