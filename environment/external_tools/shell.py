@@ -3,6 +3,7 @@ from typing import Dict, Any
 from utils.tool import Toolset
 from utils.shell import ShellEnvironment
 from utils.exceptions import ToolCallException
+from utils.text import text_window
 
 class ShellTool(Toolset):
     def __init__(self, environment: ShellEnvironment):
@@ -19,6 +20,11 @@ class ShellTool(Toolset):
             timeout, int: The timeout in seconds for the command to execute.
         """
         try:
-            return self.environment.execute(command, cwd=cwd, timeout=timeout)
+            return text_window(
+                text=self.environment.execute(command, cwd=cwd, timeout=timeout),
+                window_id="output",
+                interface_prefix="shell",
+                window_type="segment"
+            )
         except Exception as e:
             raise ToolCallException(f"Failed to execute command: {command} due to {e}")

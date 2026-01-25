@@ -20,8 +20,8 @@ from tasks.leetcode.leetcode import LeetcodeEnvironment
 from dotenv import load_dotenv
 load_dotenv()
 
-MODEL = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B-Instruct", trust_remote_code=True, torch_dtype="auto").to("cuda")
-TOKENIZER = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct", trust_remote_code=True)
+MODEL = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B-Instruct", trust_remote_code=True, torch_dtype="auto", device_map="auto")
+TOKENIZER = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct", trust_remote_code=True, device_map="auto")
 
 LORA_CONFIG = LoraConfig(
                 r=16,
