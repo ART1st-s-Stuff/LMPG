@@ -110,14 +110,15 @@ PROMPT = dedent(
 
 HINT_TRAIN = dedent(
     """
-    Note: This is a training session.
+    This is a training session.
 
     Hint:
     - Use `next_document` tool to get the the file name of the next document.
     - Execute shell commands in `execute` tool to read files.
     - Try to figure out what to extract from the data. You can use `answer` tool with an empty
-      answer to get the correct answer. You can then practise answering some more questions.
-    - We have %DATASET_SIZE% questions in the training set.
+      answer to get the ground truth. You can then practise answering some more questions.
+    - We have %DATASET_SIZE% questions in the training set. You will be noticed when you reach
+      the last question.
     - Use `self_sft` tool to memorize knowledge that may help you deal with the task.
     - Use `finish` tool in the `answer` toolset when you with to end the training session.
     """
