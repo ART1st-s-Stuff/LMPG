@@ -87,9 +87,9 @@ class AnswerTool(Toolset):
             self.finish()
 
 class TrainingAnswerTool(Toolset):
-    def __init__(self, db: BusinessDocumentDB):
+    def __init__(self, db: BusinessDocumentDB, *, valid_train_samples: int, empty_train_samples: int):
         super().__init__()
-        ds = db.get_data(valid_train_samples=100, empty_train_samples=100)
+        ds = db.get_data(valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
         self.train_ds = ds["train_valid"] + ds["train_empty"]
         random.Random(42).shuffle(self.train_ds)
         self.current_test_index = -1
@@ -141,10 +141,10 @@ class TrainingAnswerTool(Toolset):
 
 class BusinessDocumentEnvironment(Environment):
     def __init__(self, prompt: str, db: BusinessDocumentDB, tools: Dict[str, Toolset], *,
-            max_steps: int = 100, training: bool = False):
+            max_steps: int = 100, training: bool = False, valid_train_samples: int = 100, empty_train_samples: int = 100):
         self.db = db
         self.shell_environment = LocalShellEnvironment(cwd=db.document_path)
-        answer_tool = AnswerTool(self.db) if not training else TrainingAnswerTool(self.db)
+        answer_tool = AnswerTool(self.db) if not training else TrainingAnswerTool(self.db, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
         super().__init__(tools={
                 "answer": answer_tool,
                 "shell": ShellTool(self.shell_environment),

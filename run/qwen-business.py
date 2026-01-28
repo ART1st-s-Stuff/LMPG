@@ -161,14 +161,14 @@ def get_env(key: str) -> str:
         input(f"Please enter the value for {key}: ")
     return value
 
-def train():
-    prompt_train = (PROMPT + HINT_TRAIN).replace("%FINISH_TOOL%", HINT_FINISH_TOOL)
-    task = BusinessDocumentEnvironment(prompt=prompt_train, db=db, tools={}, training=True)
+def train(db: BusinessDocumentDB):
+    prompt_train = (PROMPT + HINT_TRAIN).replace("%FINISH_TOOL%", HINT_FINISH_TOOL).replace("%DATASET_SIZE%", str(10))
+    task = BusinessDocumentEnvironment(prompt=prompt_train, db=db, tools={}, training=True, valid_train_samples=5, empty_train_samples=5)
     agent = build_agent(task)
     task.run(agent)
     print("✅ Training done. Scores: ", agent.scoreboard_manager.get_current_score())
 
-def test():
+def test(db: BusinessDocumentDB):
     # 加载训练后的模型
     trained_model_path = './models/qwen25-stage-1'
     if os.path.exists(trained_model_path):
@@ -182,34 +182,12 @@ def test():
     else:
         print(f"⚠️  Trained model not found at {trained_model_path}, using original PEFT_MODEL")
         trained_model = PEFT_MODEL
-    
     prompt_test = (PROMPT + HINT_TEST).replace("%FINISH_TOOL%", "")
-    task = BusinessDocumentEnvironment(prompt=prompt_test, db=db, tools={})
+    task = BusinessDocumentEnvironment(prompt=prompt_test, db=db, tools={}, training=False)
     agent = build_agent(task, model=trained_model)
     task.run(agent)
 
 if __name__ == "__main__":
     db = BusinessDocumentDB(document_path="tasks/business/matrix/data")
-    # Training round
-    valid_pairs, empty_pairs = db.get_training_data(valid_samples=100, empty_samples=100)
-    scores = []
-    for document_id, gt in valid_pairs:
-        prompt = PROMPT.replace("%DOCUMENT_ID%", document_id)
-        task = BusinessDocumentEnvironment(prompt=prompt, db=db, tools={})
-        agent = build_agent(task)
-        task.run(agent)
-
-        #agent.sft_trainer.train([{"role": "user", "content": "hello"}, {"role": "assistant", "content": "world"}], {"learning_rate": 3e-5})
-        scores.append(agent.scoreboard_manager.get_current_score())
-        if scores[-1] > 0:
-            # The agent successfully completed the task.
-            # Save the history chat to a file.
-            print("✅ Agent successfully completed the task. Training the agent...")
-            agent.sft_trainer.train(agent.history_chat, {"learning_rate": 3e-5})
-            if len([ x for x in scores if x > 0 ]) > 14:
-                print(scores)
-                print("Stage 1 finished.")
-                PEFT_MODEL.save_pretrained('./models/qwen25-stage-1')
-                break
-        else:
-            print("❌ Agent failed to complete the task. Skipping training.")
+    train(db)
+    test(db)
