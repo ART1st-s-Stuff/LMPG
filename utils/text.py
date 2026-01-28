@@ -71,9 +71,9 @@ class SegmentTextWindow(TextWindow):
         }
     
     def read(self) -> str:
-        if self.current_segment >= len(self.segments):
-            return f"<[{self.window_name}]>Max segment number: {len(self.segments)}<[/{self.window_name}]>"
-        ret = f"<[WINDOW{self.window_name}][PARAGRAPH {self.current_segment} OF {len(self.segments)}]>" + self.segments[self.current_segment - 1] + "<[END_OF_PARAGRAPH]>"
+        if self.current_segment > len(self.segments):
+            return f"<[WINDOW {self.window_name}]>Max segment number: {len(self.segments)}<[/{self.window_name}]>"
+        ret = f"<[WINDOW {self.window_name}][PARAGRAPH {self.current_segment} OF {len(self.segments)}]>" + self.segments[self.current_segment - 1] + "<[END_OF_PARAGRAPH]>"
         return ret
 
     def go_to_segment(self, segment_number: int) -> str:
