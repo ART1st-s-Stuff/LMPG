@@ -25,17 +25,17 @@ class BusinessDocumentDB:
         gt_file = os.path.join(document_path, "ground_truth.json")
         with open(gt_file, "r", encoding="utf-8") as f:
             self.gt = json.load(f)
-        self.valid_samples = { x: y if y is not None else "None" for x, y in self.gt.items() if y is not None }
-        self.empty_samples = { x: y if y is not None else "None" for x, y in self.gt.items() if y is None }
+        self.valid_samples = { x: y for x, y in self.gt.items() if y != "None" }
+        self.empty_samples = { x: y for x, y in self.gt.items() if y == "None" }
 
     def get_data(self, valid_train_samples: int, empty_train_samples: int, rng_seed: int = 42) -> List[Tuple[str, str]]:
         rng = random.Random(rng_seed)
         valid_train_pairs = rng.sample(list(self.valid_samples.items()), valid_train_samples)
         empty_train_pairs = rng.sample(list(self.empty_samples.items()), empty_train_samples)
         # The rest are test data.
-        valid_test_pairs = list(self.valid_samples.items()) - valid_train_pairs
-        empty_test_pairs = list(self.empty_samples.items()) - empty_train_pairs
-        test_pairs = valid_test_pairs + empty_test_pairs
+        valid_test_pairs = set(self.valid_samples.items()) - set(valid_train_pairs)
+        empty_test_pairs = set(self.empty_samples.items()) - set(empty_train_pairs)
+        test_pairs = list(set(valid_test_pairs) | set(empty_test_pairs))
         # Shuffle
         rng.shuffle(test_pairs)
         return {
