@@ -54,7 +54,7 @@ PROMPT = dedent(
     Example output 2:
     ```
     <think>First look at the `note.md` file to see the information.</think>
-    <tool>{ "tool_set": "shell-sandbox", "tool_name": "execute", "args": { "command": "sed -n '1,25p' note.md" } }</tool>
+    <tool>{ "tool_set": "shell", "tool_name": "execute", "args": { "command": "sed -n '1,25p' note.md" } }</tool>
     ```
     Example output 3:
     ```
@@ -110,7 +110,8 @@ PROMPT = dedent(
 
 HINT_TRAIN = dedent(
     """
-    This is a training session.
+    Note: This is a training session. Your task now is to find out what information to extract
+    from the document.
 
     Hint:
     - Use `next_document` tool to get the the file name of the next document.
