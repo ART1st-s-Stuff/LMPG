@@ -52,14 +52,13 @@ class SegmentTextWindow(TextWindow):
     """A list of paragraphs, split into segments."""
     SEGMENT_LENGTH = settings.TEXT_WINDOW_SEGMENT_LENGTH
 
-    def __init__(self, tokenizer, text: str | Sequence[str], window_id: str, interface_prefix: str, volatile: bool = False):
+    def __init__(self, tokenizer, text: Any, window_id: str, interface_prefix: str, volatile: bool = False):
         super().__init__(window_id, interface_prefix, volatile)
         self.tokenizer = tokenizer
-        if isinstance(text, str):
-            text = [text]
+        if not isinstance(text, str):
+            text = [ str(text) ]
         self.segments = []
-        text = [ paragraph + "<[END_OF_PARAGRAPH]>" for paragraph in text ]
-        text[-1] += "<[END_OF_TEXT]>"
+        text = [ f"<[PARAGRAPH {i + 1} OF {len(text)} IN WINDOW {self.window_name}]>" + paragraph + "<[END_OF_PARAGRAPH]>" for i, paragraph in enumerate(text) ]
         for paragraph in text:
             tokens = self.tokenizer.encode(paragraph)
             for i in range(0, len(tokens), self.SEGMENT_LENGTH):
