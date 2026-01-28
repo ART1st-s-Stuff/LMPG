@@ -56,14 +56,12 @@ class SegmentTextWindow(TextWindow):
         super().__init__(window_id, interface_prefix, volatile)
         self.tokenizer = tokenizer
         if not isinstance(text, str):
-            text = [ str(text) ]
+            text = str(text)
         self.segments = []
-        text = [ f"<[PARAGRAPH {i + 1} OF {len(text)} IN WINDOW {self.window_name}]>" + paragraph + "<[END_OF_PARAGRAPH]>" for i, paragraph in enumerate(text) ]
-        for paragraph in text:
-            tokens = self.tokenizer.encode(paragraph)
-            for i in range(0, len(tokens), self.SEGMENT_LENGTH):
-                self.segments.append(self.tokenizer.decode(tokens[i:i + self.SEGMENT_LENGTH]))
-        self.current_segment = 0
+        tokens = self.tokenizer.encode(text)
+        for i in range(0, len(tokens), self.SEGMENT_LENGTH):
+            self.segments.append(self.tokenizer.decode(tokens[i:i + self.SEGMENT_LENGTH]))
+        self.current_segment = 1
 
     @property
     def interface(self):
@@ -74,8 +72,8 @@ class SegmentTextWindow(TextWindow):
     
     def read(self) -> str:
         if self.current_segment >= len(self.segments):
-            return f"<[{self.window_name}]>Max segment number: {len(self.segments) - 1}<[/{self.window_name}]>"
-        ret = self.segments[self.current_segment]
+            return f"<[{self.window_name}]>Max segment number: {len(self.segments)}<[/{self.window_name}]>"
+        ret = f"<[WINDOW{self.window_name}][PARAGRAPH {self.current_segment} OF {len(self.segments)}]>" + self.segments[self.current_segment - 1] + "<[END_OF_PARAGRAPH]>"
         return ret
 
     def go_to_segment(self, segment_number: int) -> str:
