@@ -94,9 +94,10 @@ PROMPT = dedent(
       - tool_name: finish: Finish the session after your solution is submitted. You may summarize some experiences and memorize them before finishing.
         - args: No args.
     - toolset: self_sft
-      - tool_name: memorize: Memorize a piece of information or experience that may help you deal with similar tasks in the future.
+      - tool_name: memorize: Memorize a piece of information or experience that may help you deal with similar tasks in the future, using LoRA.
         - args:
           - content, str: The content to memorize.
+          - config, json: Specify the learning rate. Example: { "learning_rate": 0.0001 }
     - toolset: set_topic
       - tool_name: set_topic: Set the topic of the context. This will be presented in the beginning of all conversation history.
         - args:
