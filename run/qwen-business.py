@@ -114,6 +114,7 @@ HINT_TRAIN = dedent(
     from the document.
 
     Hint:
+    - Use `set_topic` tool to remind yourself of the current step you are in.
     - Use `next_document` tool to get the the file name of the next document.
     - Execute shell commands in `execute` tool to read files.
     - Try to figure out what to extract from the data. You can use `answer` tool with an empty
