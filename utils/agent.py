@@ -85,7 +85,7 @@ class Agent(StateManagerMixin):
     @property
     def toolsets(self):
         return {
-            **environment.tools,
+            **self.environment.tools,
             **self.internal_tools,
         }
 

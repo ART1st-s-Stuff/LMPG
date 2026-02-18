@@ -99,14 +99,14 @@ PROMPT = dedent(
         - args:
           - content, str: The content to memorize.
           - config, json: Specify the learning rate. Example: { "learning_rate": 0.0001 }
-    - toolset: set_topic
-      - tool_name: set_topic: 设置当前主题（替换整条路径），适合切换大阶段时使用。
+    - toolset: set_topic. This toolset is used to manage the topic (system prompt). Manage this in a tree-like manner.
+      - tool_name: set_topic: Clear all topics and set a new one.
         - args:
-          - topic, str: 要设置的主题。
-      - tool_name: push_topic: 在当前主题下压入一层子主题（树状进入下一层），如「任务A」→「任务A > 步骤2」。
+          - topic, str: The topic to set.
+      - tool_name: push_topic: Push a subtopic under the current topic.
         - args:
-          - subtopic, str: 子主题名称。
-      - tool_name: pop_topic: 弹出一层主题，回到上一层（树状回退）。无参数。
+          - subtopic, str: The subtopic to push.
+      - tool_name: pop_topic: Pop a topic, go back to the parent topic.
 
     Task:
     Extract information from business document.
