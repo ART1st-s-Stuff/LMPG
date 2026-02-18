@@ -16,6 +16,7 @@ from models.qwen_25 import Qwen25HFAgent
 from utils.agent import SFTHFAgent
 from environment.internal_tools.self_sft import SelfSFT_TRL
 from tasks.business.business import BusinessDocumentEnvironment, BusinessDocumentDB
+from environment.reflection_loop import inject_reflection_loop
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -99,9 +100,13 @@ PROMPT = dedent(
           - content, str: The content to memorize.
           - config, json: Specify the learning rate. Example: { "learning_rate": 0.0001 }
     - toolset: set_topic
-      - tool_name: set_topic: Set the topic of the context. This will be presented in the beginning of all conversation history.
+      - tool_name: set_topic: 设置当前主题（替换整条路径），适合切换大阶段时使用。
         - args:
-          - topic, str: The topic to set.
+          - topic, str: 要设置的主题。
+      - tool_name: push_topic: 在当前主题下压入一层子主题（树状进入下一层），如「任务A」→「任务A > 步骤2」。
+        - args:
+          - subtopic, str: 子主题名称。
+      - tool_name: pop_topic: 弹出一层主题，回到上一层（树状回退）。无参数。
 
     Task:
     Extract information from business document.
@@ -114,7 +119,7 @@ HINT_TRAIN = dedent(
     from the document.
 
     Hint:
-    - Use `set_topic` tool to remind yourself of the current step you are in.
+    - Use `set_topic` / `push_topic` / `pop_topic` to keep a tree-shaped topic (e.g. push_topic for current step, pop_topic when going back).
     - Use `next_document` tool to get the the file name of the next document.
     - Execute shell commands in `execute` tool to read files.
     - Try to figure out what to extract from the data. You can use `answer` tool with an empty
@@ -139,6 +144,16 @@ HINT_TEST = dedent(
 HINT_FINISH_TOOL = """- tool_name: finish: Finish the session after you wish to stop training.
     - args: No args.
 """
+
+REFLECTION_PROMPT = dedent(
+    """
+    Now review the progress you have made. Summarize experiences on successful and unsuccessful attempts.
+    If you found some experiences useful, you can use the `self_sft` tool to memorize them.
+    After summarizing the experiences, you should continue on your task.
+
+    If you are in the middle of the task and everything is going well, you can skip the reflection and continue on your task.
+    """
+)
 
 def build_agent(task, model=None):
     if model is None:
@@ -189,6 +204,7 @@ def test(db: BusinessDocumentDB):
     prompt_test = (PROMPT + HINT_TEST).replace("%FINISH_TOOL%", "")
     task = BusinessDocumentEnvironment(prompt=prompt_test, db=db, tools={}, training=False)
     agent = build_agent(task, model=trained_model)
+    task = inject_reflection_loop(task, reflection_prompt=REFLECTION_PROMPT, force_trigger_rounds=10)
     task.run(agent)
 
 if __name__ == "__main__":

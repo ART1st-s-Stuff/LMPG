@@ -66,7 +66,7 @@ class SelfSFT_TRL(SelfSFT):
         config_dict.update(config)
         trainer = SFTTrainer(
             model=self.model, args=SFTConfig(**config_dict),
-            train_dataset=Dataset.from_list([{"messages":dataset}]),
+            train_dataset=Dataset.from_list(dataset),
             processing_class=self.tokenizer,
             peft_config=self.peft_config
         )

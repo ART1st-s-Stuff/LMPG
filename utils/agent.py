@@ -81,16 +81,19 @@ class Agent(StateManagerMixin):
         self.pre_tool_call_hooks = []
         self.post_tool_call_hooks = []
         self.set_environment(environment)
+        
+    @property
+    def toolsets(self):
+        return {
+            **environment.tools,
+            **self.internal_tools,
+        }
 
     def set_environment(self, environment: Environment):
         self.open_windows = {}
         self.default_windows = {}
         self.environment = environment
         self.scoreboard_manager = environment.scoreboard_manager
-        self.toolsets = {
-            **environment.tools,
-            **self.internal_tools,
-        }
         
         # Set default windows: Prompt, tools, scoreboard, opened windows list
         for key, value in environment.prompt.items():

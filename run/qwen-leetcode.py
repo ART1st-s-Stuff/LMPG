@@ -102,9 +102,13 @@ HINT_TRAIN = dedent(
         - args:
           - content, str: The content to memorize.
     - toolset: set_topic
-      - tool_name: set_topic: Set the topic of the context. This will be presented in the beginning of all conversation history.
+      - tool_name: set_topic: 设置当前主题（替换整条路径）。
         - args:
-          - topic, str: The topic to set.
+          - topic, str: 要设置的主题。
+      - tool_name: push_topic: 在当前主题下压入一层子主题（树状进入下一层）。
+        - args:
+          - subtopic, str: 子主题名称。
+      - tool_name: pop_topic: 弹出一层主题，回到上一层。无参数。
 
     Task:
     Complete the leetcode problem %QID% using c++. The workspace is a generated directory under `cpp/`. The problem description is `cpp/<directory>/question.md`.
