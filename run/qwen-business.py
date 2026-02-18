@@ -184,6 +184,7 @@ def train(db: BusinessDocumentDB):
     prompt_train = (PROMPT + HINT_TRAIN).replace("%FINISH_TOOL%", HINT_FINISH_TOOL).replace("%DATASET_SIZE%", str(10))
     task = BusinessDocumentEnvironment(prompt=prompt_train, db=db, tools={}, training=True, valid_train_samples=5, empty_train_samples=5)
     agent = build_agent(task)
+    task = inject_reflection_loop(task, reflection_prompt=REFLECTION_PROMPT, force_trigger_rounds=10)
     task.run(agent)
     print("✅ Training done. Scores: ", agent.scoreboard_manager.get_current_score())
 
@@ -204,7 +205,6 @@ def test(db: BusinessDocumentDB):
     prompt_test = (PROMPT + HINT_TEST).replace("%FINISH_TOOL%", "")
     task = BusinessDocumentEnvironment(prompt=prompt_test, db=db, tools={}, training=False)
     agent = build_agent(task, model=trained_model)
-    task = inject_reflection_loop(task, reflection_prompt=REFLECTION_PROMPT, force_trigger_rounds=10)
     task.run(agent)
 
 if __name__ == "__main__":
