@@ -428,7 +428,8 @@ class SFTHFAgent(HFMixin, SFTAgent[AutoModelForCausalLM]):
     
     @property
     def internal_tools(self) -> Dict[str, Toolset]:
+        # MRO Quirks
         return {
+            **super().internal_tools,
             **super(HFMixin, self).internal_tools,
-            **super(SFTAgent, self).internal_tools,
         }
