@@ -4,6 +4,7 @@ import types
 
 class TriggerReflection(Toolset):
     def __init__(self, reflection_prompt: str, force_trigger_rounds: int):
+        super().__init__()
         self.prompt = reflection_prompt
         self.force_trigger_rounds = force_trigger_rounds
         self.current_round = 0
