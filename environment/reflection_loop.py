@@ -1,5 +1,6 @@
 from utils.environment import Environment
 from utils.tool import Toolset
+import types
 
 class TriggerReflection(Toolset):
     def __init__(self, reflection_prompt: str, force_trigger_rounds: int):
@@ -42,5 +43,5 @@ def inject_reflection_loop(environment: Environment, reflection_prompt: str, for
             if self.stop_criteria(result):
                 break
         return result
-    environment.run = reflection_looped_run
+    environment.run = types.MethodType(reflection_looped_run, environment)
     return environment
