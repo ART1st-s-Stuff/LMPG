@@ -22,10 +22,7 @@ class TriggerReflection(Toolset):
     def process_input(self, input: str | AgentForwardContent) -> str:
         if isinstance(input, str):
             return input + "\n\n" + self.prompt
-        elif isinstance(input, AgentForwardContent):
-            return input["environment"] + "\n\n" + self.prompt
-        else:
-            raise ValueError(f"Invalid input type: {type(input)}")
+        return input["environment"] + "\n\n" + self.prompt
     
     @Toolset.structurized_tool(tool_name="trigger_reflection")
     def trigger_reflection(self):
