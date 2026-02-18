@@ -1,5 +1,5 @@
 from utils.environment import Environment
-from utils.tool import Toolset, structurized_tool
+from utils.tool import Toolset
 
 class TriggerReflection(Toolset):
     def __init__(self, reflection_prompt: str, force_trigger_rounds: int):
@@ -19,7 +19,7 @@ class TriggerReflection(Toolset):
     def process_input(self, input: str) -> str:
         return input + "\n\n" + self.prompt
     
-    @structurized_tool()
+    @Toolset.structurized_tool(tool_name="trigger_reflection")
     def trigger_reflection(self):
         return self.prompt
 
