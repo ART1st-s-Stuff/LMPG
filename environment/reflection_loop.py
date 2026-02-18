@@ -1,5 +1,6 @@
 from utils.environment import Environment
 from utils.tool import Toolset
+from utils.agent import AgentForwardContent
 import types
 
 class TriggerReflection(Toolset):
@@ -18,8 +19,13 @@ class TriggerReflection(Toolset):
     def should_reflect(self):
         return self.current_round == self.force_trigger_rounds
         
-    def process_input(self, input: str) -> str:
-        return input + "\n\n" + self.prompt
+    def process_input(self, input: str | AgentForwardContent) -> str:
+        if isinstance(input, str):
+            return input + "\n\n" + self.prompt
+        elif isinstance(input, AgentForwardContent):
+            return input["environment"] + "\n\n" + self.prompt
+        else:
+            raise ValueError(f"Invalid input type: {type(input)}")
     
     @Toolset.structurized_tool(tool_name="trigger_reflection")
     def trigger_reflection(self):
