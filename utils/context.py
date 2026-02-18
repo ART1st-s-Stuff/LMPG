@@ -31,6 +31,7 @@ class SlidingWindowContextManager(DefaultContextManager):
     """Use a sliding window for context. Topic is stored as a tree path (list of strings)."""
     class SetTopicTool(Toolset):
         def __init__(self, context_manager: 'SlidingWindowContextManager'):
+            super().__init__()
             self.context_manager = context_manager
 
         @Toolset.structurized_tool()
