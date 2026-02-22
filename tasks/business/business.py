@@ -45,9 +45,9 @@ class BusinessDocumentDB:
         }
 
 class AnswerTool(Toolset):
-    def __init__(self, db: BusinessDocumentDB):
+    def __init__(self, db: BusinessDocumentDB, *, valid_train_samples: int, empty_train_samples: int):
         super().__init__()
-        ds = db.get_data()
+        ds = db.get_data(valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
         self.test_ds = ds["test"]
         self.current_test_index = -1
         self.answered = True
@@ -144,7 +144,7 @@ class BusinessDocumentEnvironment(Environment):
             max_steps: int = 100, training: bool = False, valid_train_samples: int = 100, empty_train_samples: int = 100):
         self.db = db
         self.shell_environment = LocalShellEnvironment(cwd=db.document_path)
-        answer_tool = AnswerTool(self.db) if not training else TrainingAnswerTool(self.db, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
+        answer_tool = AnswerTool(self.db, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples) if not training else TrainingAnswerTool(self.db, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
         super().__init__(tools={
                 "answer": answer_tool,
                 "shell": ShellTool(self.shell_environment),

@@ -186,11 +186,12 @@ def train(db: BusinessDocumentDB):
     agent = build_agent(task)
     task = inject_reflection_loop(task, reflection_prompt=REFLECTION_PROMPT, force_trigger_rounds=10)
     task.run(agent)
+    PEFT_MODEL.save_pretrained("./models/qwen25-business-stage-1")
     print("✅ Training done. Scores: ", agent.scoreboard_manager.get_current_score())
 
 def test(db: BusinessDocumentDB):
     # 加载训练后的模型
-    trained_model_path = './models/qwen25-stage-1'
+    trained_model_path = './models/qwen25-business-stage-1'
     if os.path.exists(trained_model_path):
         print(f"✅ Loading trained model from {trained_model_path}")
         trained_model = AutoPeftModelForCausalLM.from_pretrained(
@@ -203,7 +204,7 @@ def test(db: BusinessDocumentDB):
         print(f"⚠️  Trained model not found at {trained_model_path}, using original PEFT_MODEL")
         trained_model = PEFT_MODEL
     prompt_test = (PROMPT + HINT_TEST).replace("%FINISH_TOOL%", "")
-    task = BusinessDocumentEnvironment(prompt=prompt_test, db=db, tools={}, training=False)
+    task = BusinessDocumentEnvironment(prompt=prompt_test, db=db, tools={}, training=False, valid_train_samples=5, empty_train_samples=5)
     agent = build_agent(task, model=trained_model)
     task.run(agent)
 
