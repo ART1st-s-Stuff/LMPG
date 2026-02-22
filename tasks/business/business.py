@@ -4,6 +4,7 @@ import subprocess
 import shutil
 import json
 import random
+import re
 
 from utils.tool import Toolset
 from utils.shell import ShellEnvironment, DockerShellEnvironment, LocalShellEnvironment
@@ -12,6 +13,7 @@ from utils.exceptions import ToolCallException
 from utils.scoring import DefaultScoreboardManager, ScoreboardManager
 from environment.external_tools.shell import ShellTool
 from environment.internal_tools.self_sft import SelfSFT
+from utils.text import text_window
 
 LEETCODE_PROMPT = """
 You are a helpful assistant that helps the user to solve Leetcode problems.
@@ -87,13 +89,14 @@ class AnswerTool(Toolset):
             self.finish()
 
 class TrainingAnswerTool(Toolset):
-    def __init__(self, db: BusinessDocumentDB, *, valid_train_samples: int, empty_train_samples: int):
+    def __init__(self, db: BusinessDocumentDB, environment: BusinessDocumentEnvironment, *, valid_train_samples: int, empty_train_samples: int):
         super().__init__()
         ds = db.get_data(valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
         self.train_ds = ds["train_valid"] + ds["train_empty"]
         random.Random(42).shuffle(self.train_ds)
         self.current_test_index = -1
         self.answered = True
+        self.environment = environment
 
     @Toolset.structurized_tool()
     def next_document(self, _scoreboard_manager: ScoreboardManager) -> str:
@@ -104,6 +107,7 @@ class TrainingAnswerTool(Toolset):
             self.finish()
             return
         document_id, _ = self.train_ds[self.current_test_index]
+        self.environment.current_document = document_id
         if self.answered == False:
             _scoreboard_manager.get_scoreboard().reward(-100, "You should submit the answer to the previous document first.")
             return
@@ -139,12 +143,47 @@ class TrainingAnswerTool(Toolset):
         """Finish the training session."""
         self.finish()
 
+class ShellToolWithReward(Toolset):
+    def __init__(self, environment: ShellEnvironment, task_environment: BusinessDocumentEnvironment):
+        super().__init__()
+        self.environment = environment
+        self.task_environment = task_environment
+        self.granted_files = set()
+
+    @Toolset.structurized_tool()
+    def execute(self, _scoreboard_manager: ScoreboardManager, command: str, cwd: str = "", timeout: int | None = None) -> Dict[str, Any]:
+        """Execute a command in the shell.
+
+        Args:
+            command, str: The command to execute.
+            cwd, str: The working directory to execute the command in. Set to "" for default working directory.
+            timeout, int: The timeout in seconds for the command to execute.
+        """
+        try:
+            result = self.environment.execute(command, cwd=cwd, timeout=timeout)
+            if result["returncode"] == 0:
+                if self.task_environment.current_document not in self.granted_files and \
+                        re.match(f"sed -n '\d+,\d+p' {self.task_environment.current_document}", command):
+                    _scoreboard_manager.get_scoreboard().reward(5, "Successfully read the document.")
+                    self.granted_files.add(self.task_environment.current_document)
+            else:
+                _scoreboard_manager.get_scoreboard().reward(-5, "Command executed with errors.")
+            return text_window(
+                text=result,
+                window_id="output",
+                interface_prefix="shell",
+                window_type="segment"
+            )
+        except Exception as e:
+            raise ToolCallException(f"Failed to execute command: {command} due to {e}")
+
 class BusinessDocumentEnvironment(Environment):
     def __init__(self, prompt: str, db: BusinessDocumentDB, tools: Dict[str, Toolset], *,
             max_steps: int = 100, training: bool = False, valid_train_samples: int = 100, empty_train_samples: int = 100):
         self.db = db
         self.shell_environment = LocalShellEnvironment(cwd=db.document_path)
         answer_tool = AnswerTool(self.db, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples) if not training else TrainingAnswerTool(self.db, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
+        self.current_document : Optional[str] = None
         super().__init__(tools={
                 "answer": answer_tool,
                 "shell": ShellTool(self.shell_environment),

@@ -121,9 +121,10 @@ HINT_TRAIN = dedent(
     Hint:
     - Use `set_topic` / `push_topic` / `pop_topic` to keep a tree-shaped topic (e.g. push_topic for current step, pop_topic when going back).
     - Use `next_document` tool to get the the file name of the next document.
-    - Execute shell commands in `execute` tool to read files.
-    - Try to figure out what to extract from the data. You can use `answer` tool with an empty
-      answer to get the ground truth. You can then practise answering some more questions.
+    - Read file with `execute` tool. You should use commands such as `sed -n '<start>,<end>p' <filename>`.
+    - After reading the file, try to figure out what to extract from the data. You can use
+      `answer` tool with an empty answer to get the ground truth. You can summarize some experiences
+      and then practise answering some more questions.
     - We have %DATASET_SIZE% questions in the training set. You will be noticed when you reach
       the last question.
     - Use `self_sft` tool to memorize knowledge that may help you deal with the task.
