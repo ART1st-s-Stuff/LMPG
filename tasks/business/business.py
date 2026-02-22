@@ -89,7 +89,7 @@ class AnswerTool(Toolset):
             self.finish()
 
 class TrainingAnswerTool(Toolset):
-    def __init__(self, db: BusinessDocumentDB, environment: BusinessDocumentEnvironment, *, valid_train_samples: int, empty_train_samples: int):
+    def __init__(self, db: BusinessDocumentDB, environment: "BusinessDocumentEnvironment", *, valid_train_samples: int, empty_train_samples: int):
         super().__init__()
         ds = db.get_data(valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
         self.train_ds = ds["train_valid"] + ds["train_empty"]
@@ -144,7 +144,7 @@ class TrainingAnswerTool(Toolset):
         self.finish()
 
 class ShellToolWithReward(Toolset):
-    def __init__(self, environment: ShellEnvironment, task_environment: BusinessDocumentEnvironment):
+    def __init__(self, environment: ShellEnvironment, task_environment: "BusinessDocumentEnvironment"):
         super().__init__()
         self.environment = environment
         self.task_environment = task_environment
@@ -182,11 +182,12 @@ class BusinessDocumentEnvironment(Environment):
             max_steps: int = 100, training: bool = False, valid_train_samples: int = 100, empty_train_samples: int = 100):
         self.db = db
         self.shell_environment = LocalShellEnvironment(cwd=db.document_path)
-        answer_tool = AnswerTool(self.db, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples) if not training else TrainingAnswerTool(self.db, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
+        answer_tool = AnswerTool(self.db, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples) \
+            if not training else TrainingAnswerTool(self.db, self, valid_train_samples=valid_train_samples, empty_train_samples=empty_train_samples)
         self.current_document : Optional[str] = None
         super().__init__(tools={
                 "answer": answer_tool,
-                "shell": ShellTool(self.shell_environment),
+                "shell": ShellToolWithReward(self.shell_environment, self),
                 **tools,
             }, scoreboard_manager=DefaultScoreboardManager(), prompt={
                 "prompt": prompt,
