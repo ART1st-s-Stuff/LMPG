@@ -19,13 +19,15 @@ class TriggerReflection(Toolset):
     def should_reflect(self):
         return self.current_round == self.force_trigger_rounds
         
-    def process_input(self, input: str | AgentForwardContent) -> str:
+    def force_reflection(self, input: str | AgentForwardContent) -> str:
+        self.reset()
         if isinstance(input, str):
             return input + "\n\n" + self.prompt
         return input["environment"] + "\n\n" + self.prompt
     
     @Toolset.structurized_tool(tool_name="trigger_reflection")
     def trigger_reflection(self):
+        self.reset()
         return self.prompt
 
 
@@ -38,7 +40,7 @@ def inject_reflection_loop(environment: Environment, reflection_prompt: str, for
             if i == 0:
                 agent_input = list(self.prompt.values())[0]
             elif tool.should_reflect():
-                agent_input = tool.process_input(result)
+                agent_input = tool.force_reflection(result)
             else:
                 agent_input = result
             result = agent.step(agent_input)
