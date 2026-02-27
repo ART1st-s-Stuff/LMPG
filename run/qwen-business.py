@@ -21,8 +21,10 @@ from environment.reflection_loop import inject_reflection_loop
 from dotenv import load_dotenv
 load_dotenv()
 
-MODEL = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B-Instruct", trust_remote_code=True, torch_dtype="auto", device_map="auto")
-TOKENIZER = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct", trust_remote_code=True, device_map="auto")
+#MODEL = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-7B-Instruct", trust_remote_code=True, torch_dtype="auto", device_map="auto")
+#TOKENIZER = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct", trust_remote_code=True, device_map="auto")
+MODEL = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3.5-35B-A3B", trust_remote_code=True, torch_dtype="auto", device_map="auto")
+TOKENIZER = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-35B-A3B", trust_remote_code=True, device_map="auto")
 
 LORA_CONFIG = LoraConfig(
                 r=16,
