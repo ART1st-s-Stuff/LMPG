@@ -1,6 +1,7 @@
 from typing import Literal, Callable, Sequence, Dict, Any
 from abc import ABC, abstractmethod
 from textwrap import dedent
+import tiktoken
 
 from . import settings
 from .exceptions import ToolNotExistException
@@ -52,9 +53,9 @@ class SegmentTextWindow(TextWindow):
     """A list of paragraphs, split into segments."""
     SEGMENT_LENGTH = settings.TEXT_WINDOW_SEGMENT_LENGTH
 
-    def __init__(self, tokenizer, text: Any, window_id: str, interface_prefix: str, volatile: bool = False):
+    def __init__(self, text: Any, window_id: str, interface_prefix: str, volatile: bool = False):
         super().__init__(window_id, interface_prefix, volatile)
-        self.tokenizer = tokenizer
+        self.tokenizer = tiktoken.get_encoding("gpt-4o")
         if not isinstance(text, str):
             text = str(text)
         self.segments = []
@@ -141,7 +142,7 @@ class FileTextWindow(TextWindow):
     
 def text_window(text: str | Sequence[str], window_id: str, interface_prefix: str, window_type: Literal['segment', 'file'], volatile: bool = False) -> TextWindow:
     if window_type == 'segment':
-        return SegmentTextWindow(settings.TOKENIZER, text, window_id, interface_prefix, volatile)
+        return SegmentTextWindow(text, window_id, interface_prefix, volatile)
     elif window_type == 'file':
         return FileTextWindow(text, window_id, interface_prefix, volatile)
     else:
