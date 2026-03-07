@@ -150,11 +150,13 @@ HINT_FINISH_TOOL = """- tool_name: finish: Finish the session after you wish to 
 
 REFLECTION_PROMPT = dedent(
     """
-    Now review the progress you have made. Summarize experiences on successful and unsuccessful attempts.
-    If you found some experiences useful, you can use the `self_sft` tool to memorize them.
-    After summarizing the experiences, you should continue on your task.
-
-    If you are in the middle of the task and everything is going well, you can skip the reflection and continue on your task.
+    Now review the progress you have made. What you should do in the following few steps:
+    
+    1. Review the progress you have made. Is it going well or you are encountering difficulties?
+    2. Should you continue, or try a different approach, or give up?
+    3. Do you discover any experiences that may help you deal with similar tasks in the future?
+       If yes, you can use the `self_sft` tool to memorize them.
+    4. After the reflection, you should continue on your task.
     """
 )
 
