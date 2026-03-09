@@ -55,7 +55,7 @@ class SegmentTextWindow(TextWindow):
 
     def __init__(self, text: Any, window_id: str, interface_prefix: str, volatile: bool = False):
         super().__init__(window_id, interface_prefix, volatile)
-        self.tokenizer = tiktoken.get_encoding("gpt-4o")
+        self.tokenizer = tiktoken.get_encoding("o200k_base")
         if not isinstance(text, str):
             text = str(text)
         self.segments = []

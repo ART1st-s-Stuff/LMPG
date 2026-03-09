@@ -118,7 +118,8 @@ PROMPT = dedent(
 HINT_TRAIN = dedent(
     """
     Note: This is a training session. Your task now is to find out what information to extract
-    from the document.
+    from the document. The information could be None, which means the document does not contain
+    required information.
 
     Hint:
     - Use `set_topic` / `push_topic` / `pop_topic` to keep a tree-shaped topic (e.g. push_topic for current step, pop_topic when going back).
@@ -153,6 +154,7 @@ REFLECTION_PROMPT = dedent(
     Now review the progress you have made. What you should do in the following few steps:
     
     1. Review the progress you have made. Is it going well or you are encountering difficulties?
+       Is your progress going towards the task goal? You may re-read the task prompts to check.
     2. Should you continue, or try a different approach, or give up?
     3. Do you discover any experiences that may help you deal with similar tasks in the future?
        If yes, you can use the `self_sft` tool to memorize them.
@@ -199,11 +201,13 @@ def test(db: BusinessDocumentDB):
     trained_model_path = './models/qwen25-business-stage-1'
     if os.path.exists(trained_model_path):
         print(f"✅ Loading trained model from {trained_model_path}")
+        # 使用 device_map="sequential" 避免 accelerate 与 PEFT 的 set/list 不兼容问题
+        # （PEFT 传入的 _no_split_modules 为 set，get_balanced_memory 期望 list/tuple）
         trained_model = AutoPeftModelForCausalLM.from_pretrained(
             trained_model_path, 
             trust_remote_code=True, 
             torch_dtype="auto", 
-            device_map="auto"
+            device_map="sequential"
         )
     else:
         print(f"⚠️  Trained model not found at {trained_model_path}, using original PEFT_MODEL")
@@ -214,6 +218,9 @@ def test(db: BusinessDocumentDB):
     task.run(agent)
 
 if __name__ == "__main__":
-    db = BusinessDocumentDB(document_path="tasks/business/matrix/data")
-    train(db)
-    test(db)
+    args = sys.argv[1:]
+    if len(args) > 0 and args[0] == "test":
+        test(db)
+    else:
+        db = BusinessDocumentDB(document_path="tasks/business/matrix/data")
+        train(db)

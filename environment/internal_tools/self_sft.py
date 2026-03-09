@@ -72,6 +72,7 @@ class SelfSFT_TRL(SelfSFT):
         )
         trainer.train()
         self.model = trainer.model
+        self.model.eval()
         self.changed = True
 
     def get_model(self) -> AutoModelForCausalLM:

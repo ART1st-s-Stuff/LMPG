@@ -23,7 +23,7 @@ class TriggerReflection(Toolset):
         self.reset()
         if isinstance(input, str):
             return input + "\n\n" + self.prompt
-        return input["environment"] + "\n\n" + self.prompt
+        return input.get("environment", "") + "\n\n" + self.prompt
     
     @Toolset.structurized_tool(tool_name="trigger_reflection")
     def trigger_reflection(self):
