@@ -145,5 +145,6 @@ def start_server():
     trace_thread = Thread(target=lambda: app.run(debug=False, use_reloader=False, host='0.0.0.0', port=5000), daemon=True)
     trace_thread.start()
     print("Trace server started.")
+    return trace_thread
 
-start_server()
+# start_server()
